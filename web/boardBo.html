@@ -1,0 +1,2003 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Trình chiếu nội bộ</title>
+
+<style>
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  overflow: hidden;
+  font-family: sans-serif;
+}
+
+.container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+.content {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 1;
+}
+
+#myDiv {
+  width: 100vw;
+  height: 100vh;
+  border: none;
+}
+
+#intro {
+  position: absolute;
+  inset: 0;
+  background: #f5f5f5;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  z-index: 2;
+}
+
+.link-buttons {
+  position: fixed;
+  top: 0;
+  left: 0;
+  box-sizing: border-box;
+  background: rgba(220,220,220,0.95);
+  padding: 8px;
+  display: none;
+  z-index: 100;
+  gap: 8px;
+  overflow: auto;
+  -webkit-overflow-scrolling: touch;
+  align-content: start;
+  justify-content: start;
+}
+
+.link-buttons button {
+  width: 48px;
+  height: 48px;
+  font-size: 18px;
+  border-radius: 12px;
+  border: 2px solid #666;
+  background: #e9e9e9;
+  cursor: pointer;
+}
+
+.link-buttons button.active {
+  background: #808080;
+  color: white;
+}
+
+#toggleLinksBtn {
+  position: fixed;
+  top: env(safe-area-inset-top, 0px);
+  left: env(safe-area-inset-left, 0px);
+  width: 44px;
+  height: 44px;
+  font-size: 20px;
+  line-height: 44px;
+  text-align: center;
+  border-radius: 50%;
+  z-index: 200;
+  border: 2px solid currentColor;
+  background: transparent;
+  color: #808080;
+
+}
+
+#toggleLinksBtn.rotated {
+  transform: rotate(90deg);
+}
+
+#tooltip-global {
+  position: fixed;
+  z-index: 9999;
+  background: #222;
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+/* ===== NOTE OVERLAY (from net.html) ===== */
+#noteCanvas{
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:90;          /* above <object>, below menu button */
+  touch-action:none;
+  pointer-events:none; /* bật note mới nhận input */
+}
+
+#annoBar{
+  position:fixed;
+  right:10px;
+  top:60px;
+  z-index:210;
+  display:none;
+}
+
+/* mặc định: dọc */
+#annoBar button{
+  display:block;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  font-size:18px;
+  margin-bottom:6px;
+}
+
+/* ===== shape selector (gọn) ===== */
+#shapeBox{
+  display:block;
+  margin-bottom:6px;
+}
+#shapeBox select{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  font-size:18px;
+  text-align:center;
+}
+#shapeBox .dashToggle{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  justify-content:center;
+  font-size:12px;
+  user-select:none;
+  margin-top:4px;
+}
+#shapeBox input{
+  width:16px;
+  height:16px;
+}
+@media (orientation: portrait){
+  #shapeBox{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    margin-right:6px;
+    margin-bottom:0;
+  }
+  #shapeBox .dashToggle{
+    margin-top:0;
+    font-size:12px;
+  }
+}
+
+/* MÀN DỌC -> ngang */
+@media (orientation: portrait){
+  #annoBar{
+    right:50%;
+    top:auto;
+    bottom:10px;
+    transform:translateX(50%);
+  }
+  #annoBar button{
+    display:inline-block;
+    margin-right:6px;
+    margin-bottom:0;
+  }
+}
+/* MÀN NGANG -> dọc */
+@media (orientation: landscape){
+  #annoBar{
+    right:10px;
+    top:60px;
+    bottom:auto;
+    transform:none;
+  }
+  #annoBar button{
+    display:block;
+    margin-bottom:6px;
+    margin-right:0;
+  }
+}
+
+
+/* ===== annoBar group layout (gọn theo nhóm) ===== */
+#annoBar{
+  position:fixed;
+  right:10px;
+  top:60px;
+  z-index:210;
+  display:none;
+}
+#annoBar .annoGrp{
+  display:flex;
+  gap:6px;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:6px;
+}
+#annoBar .annoChk{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  font-size:12px;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:none;
+}
+#annoBar .annoChk input{
+  width:16px;
+  height:16px;
+}
+/* buttons */
+#annoBar button{
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  font-size:18px;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:none;
+}
+/* shapeBox still works */
+#shapeBox{
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  margin-bottom:0;
+}
+#shapeBox select{
+  width:44px;
+  height:44px;
+  border-radius:12px;
+  font-size:18px;
+  text-align:center;
+}
+#shapeBox .dashToggle{
+  display:flex;
+  align-items:center;
+  gap:4px;
+  justify-content:center;
+  font-size:12px;
+  user-select:none;
+  -webkit-user-select:none;
+  -webkit-touch-callout:none;
+  touch-action:none;
+  margin-top:0;
+}
+#shapeBox input{
+  width:16px;
+  height:16px;
+}
+/* Portrait: move to bottom center, stack groups horizontally */
+@media (orientation: portrait){
+  #annoBar{
+    right:50%;
+    top:auto;
+    bottom:10px;
+    transform:translateX(50%);
+  }
+  #annoBar .annoGrp{
+    margin-bottom:0;
+  }
+  #annoBar{
+    display:none; /* controlled by JS */
+  }
+}
+/* Landscape: keep vertical groups */
+@media (orientation: landscape){
+  #annoBar{
+    right:10px;
+    top:60px;
+    bottom:auto;
+    transform:none;
+  }
+}
+
+#noteToggleBtn{
+  /* ✏️ nằm trong menu link */
+  position: static;
+  width: 48px;
+  height: 48px;
+  font-size: 20px;
+  border-radius: 12px;
+  border: 2px solid #666;
+  background: #e9e9e9;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0.8;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: none;
+}
+
+#noteToggleBtn:hover{ opacity: 1; }
+#noteToggleBtn.active{
+  background:#808080;
+  color:#fff;
+}
+
+
+
+
+#noteSelectBtn.active, #noteDelSelBtn.active{
+  background:#808080;
+  color:#fff;
+}
+
+
+/* ===== Note menu panel (Group 3) ===== */
+#grpOps{ position: relative; }
+#noteMenuBtn{
+  width:48px;height:48px;border-radius:14px;
+  border:2px solid #666;background:#e9e9e9;
+  font-size:18px; cursor:pointer;
+  user-select:none;-webkit-user-select:none;touch-action:none;
+}
+.notePanel{
+  position:absolute;
+  right:0;
+  bottom:56px;
+  display:flex;
+  gap:8px;
+  padding:10px;
+  border-radius:16px;
+  background:rgba(255,255,255,0.92);
+  border:2px solid #bbb;
+  box-shadow:0 8px 18px rgba(0,0,0,0.12);
+  z-index:240;
+}
+.notePanel button{
+  width:48px;height:48px;border-radius:14px;
+  border:2px solid #aaa;background:#fff;
+  font-size:18px; cursor:pointer;
+  user-select:none;-webkit-user-select:none;touch-action:none;
+}
+.hidden{ display:none !important; }
+
+
+/* GROUP 2 panel */
+#grpMode{ position: relative; }
+
+/* Portrait: menu panels xếp dọc cho gọn */
+@media (orientation: portrait){
+  .notePanel{ flex-direction: column; align-items: stretch; }
+}
+
+/* ensure menu panel clickable on top of canvas */
+#annoBar, #annoBar *{ pointer-events:auto; }
+/* ===== CUSTOM CHECKBOX: DASH ===== */
+.dashToggle{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  user-select:none;
+}
+
+/* Ẩn checkbox gốc */
+#noteShapeDash{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+
+/* Hộp hiển thị */
+.dashBox{
+  width:18px;
+  height:18px;
+  border:2px solid #666;
+  border-radius:4px;        /* vuông bo nhẹ */
+  background:transparent;  /* ⬜ rỗng */
+  transition:all 0.15s ease;
+  box-sizing:border-box;
+}
+
+/* Khi checked → ô vuông đặc */
+#noteShapeDash:checked + .dashBox{
+  background:#666;         /* ⬛ đặc */
+  border-color:#666;
+}
+
+/* Hover cho dễ bấm */
+.dashToggle:hover .dashBox{
+  border-color:#333;
+}
+
+/* Mobile: tăng vùng bấm */
+@media (pointer:coarse){
+  .dashBox{
+    width:22px;
+    height:22px;
+  }
+}
+
+
+/* ====== OVERRIDE LAYOUT (FIX): portrait = buttons ngang + panel dọc; landscape = buttons dọc + panel ngang ====== */
+/* reset base */
+#annoBar{ display:none; } /* JS controls on/off; keep display none here */
+
+/* Portrait (quay dọc): nút chính NGANG, panel con DỌC */
+@media (orientation: portrait){
+  #annoBar{
+    right:50% !important;
+    left:auto !important;
+    top:auto !important;
+    bottom:10px !important;
+    transform:translateX(50%) !important;
+  }
+
+  /* các group nằm ngang cạnh nhau */
+  #annoBar{ 
+    /* keep as block, but groups inside align inline */
+    white-space: nowrap;
+  }
+
+  #annoBar .annoGrp{
+    display:inline-flex !important;
+    flex-direction: row !important;
+    align-items:center !important;
+    justify-content:center !important;
+    gap:6px !important;
+    margin:0 6px 0 0 !important;
+    vertical-align: middle;
+  }
+
+  #annoBar .annoGrp > button{
+    display:inline-flex !important;
+    align-items:center;
+    justify-content:center;
+    margin:0 !important;
+  }
+
+  /* panel con bung DỌC dưới nút */
+  #annoBar .notePanel{
+    flex-direction: column !important;
+    align-items: stretch !important;
+    top:auto!important;
+    bottom:100%  !important;
+    left:50% !important;
+    right:auto !important;
+    transform:translateX(-50%) !important;
+  }
+}
+
+/* Landscape (quay ngang): nút chính DỌC, panel con NGANG */
+@media (orientation: landscape){
+  #annoBar{
+    right:10px !important;
+    left:auto !important;
+    top:60px !important;
+    bottom:auto !important;
+    transform:none !important;
+  }
+
+  #annoBar .annoGrp{
+    display:flex !important;
+    flex-direction: column !important;
+    align-items:center !important;
+    justify-content:center !important;
+    gap:6px !important;
+    margin:0 0 8px 0 !important;
+  }
+
+  #annoBar .annoGrp > button{
+    display:flex !important;
+    margin:0 !important;
+  }
+
+  /* panel con bung NGANG bên trái group */
+  #annoBar .notePanel{
+    flex-direction: row !important;
+    align-items:center !important;
+    left:auto !important;
+    right:100% !important;
+    top:50% !important;
+    bottom:auto !important;
+    transform:translateY(-50%) !important;
+  }
+}
+/* Nút tròn: canh icon chính giữa */
+#annoBar button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;         /* tránh icon bị tụt */
+  padding: 0;             /* tránh lệch do padding */
+}
+
+/* Nếu bạn có class riêng cho nút tròn thì thêm luôn */
+#annoBar .annoGrp > button{
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+@media (orientation: landscape){
+  #annoBar .annoGrp{
+    margin: 8px 0;
+  }
+}
+
+
+
+/* ===== SIMPLE NOTE: only show when menu open; position depends on orientation ===== */
+#noteToggleBtn{
+  position: fixed;
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  z-index: 220;
+  display: none;          /* hidden by default; JS toggles */
+  align-items: center;
+  justify-content: center;
+}
+
+/* LANDSCAPE: bottom-left */
+@media (orientation: landscape){
+  #noteToggleBtn{
+    left: env(safe-area-inset-left, 0px);
+    bottom: env(safe-area-inset-bottom, 0px);
+    margin: 8px;
+  }
+}
+
+/* PORTRAIT: top-right */
+@media (orientation: portrait){
+  #noteToggleBtn{
+    right: env(safe-area-inset-right, 0px);
+    top: env(safe-area-inset-top, 0px);
+    margin: 8px;
+  }
+}
+
+/* ===== SIMPLE NOTE: show only when menu open; dock next to ☰ ===== */
+#noteToggleBtn{
+  position: fixed;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  z-index: 220;
+  display: none;          /* hidden by default; JS toggles */
+  align-items: center;
+  justify-content: center;
+}
+
+/* LANDSCAPE: NOTE nằm bên phải nút ☰ */
+@media (orientation: landscape){
+  #noteToggleBtn{
+    top: env(safe-area-inset-top, 0px);
+    left: calc(env(safe-area-inset-left, 0px) + 40px + 12px); /* 44=☰, 8=gap */
+  }
+  .link-buttons{
+    width: 112px !important;  /* nới khung xám */
+  }
+}
+
+/* PORTRAIT: NOTE nằm dưới nút ☰ */
+@media (orientation: portrait){
+  #noteToggleBtn{
+    left: env(safe-area-inset-left, 0px);
+    top: calc(env(safe-area-inset-top, 0px) + 40px + 12px);
+  }
+  .link-buttons{
+    padding-left: 64px !important; /* chừa cột trái cho ☰ + NOTE */
+  }
+}
+
+</style>
+</head>
+
+<body>
+
+<button id="toggleLinksBtn"></button>
+  <button id="noteToggleBtn" title="Bật/Tắt chú thích">✏️</button>
+
+
+<div class="container">
+  <div class="link-buttons" id="linkContainer">
+    
+  </div>
+
+  <div class="content" id="content">
+    <div id="intro">
+      <h1>Chào bạn</h1>
+      <p>Bản tin lớp _ Ms Lien08gvmk</p>
+    </div>
+    <object id="myDiv"></object>
+    <canvas id="noteCanvas"></canvas>
+  </div>
+</div>
+
+
+<div id="annoBar">
+  <!-- GROUP 1: màu + invert (checkbox). Color: tap đổi màu / hold = eraser -->
+  <div class="annoGrp" id="grpColor">
+    <button id="noteColorBtn" title="Tap đổi màu / Hold: Eraser">K</button>
+</div>
+
+  <!-- GROUP 2: draw/text/shape (tap mở panel) -->
+  <div class="annoGrp" id="grpMode">
+    <button id="noteModeBtn" title="Tap: chọn chế độ vẽ / text / shape">✍️</button>
+
+    <div id="noteModePanel" class="notePanel hidden" aria-label="Draw/Text/Shape">
+      <button class="modeBtn" data-mode="pen" title="Bút">✍️</button>
+      <button class="modeBtn" data-mode="text" title="Text">T</button>
+      <button class="modeBtn" data-mode="line" title="Line">/</button>
+      <button class="modeBtn" data-mode="rect" title="Rect">▭</button>
+      <button class="modeBtn" data-mode="ellipse" title="Ellipse">⬭</button>
+    </div>
+  </div>
+
+  <!-- GROUP 3: menu (tap mở panel) / hold ẩn-hiện note -->
+  <div class="annoGrp" id="grpOps">
+    <button id="noteMenuBtn" title="Tap: mở menu chú thích / Hold: ẩn-hiện note">::</button>
+    <div id="noteMenuPanel" class="notePanel hidden">
+      <button id="noteSelectBtn" title="Chọn & dời nhóm (kéo để chọn, kéo lần nữa để dời)">⬚</button>
+      <button id="noteUndoBtn" title="Undo">↶</button>
+      <button id="noteRedoBtn" title="Redo">↷</button>
+      <button id="noteClearBtn" title="Xóa tất cả (hoặc xóa vùng chọn)">🗑️</button>
+   <label class="dashToggle" title="Tùy chọn (dash / invert)">
+  <input type="checkbox" id="noteShapeDash" />
+  <span class="dashBox"></span>
+</label>
+    </div>
+  </div>
+</div>
+
+<div id="tooltip-global"></div>
+
+<script>
+console.log('boardBo_fixed_v3 loaded', new Date().toISOString());
+
+var items = [];
+var links = [];
+var titles = [];
+
+var linkContainer = document.getElementById('linkContainer');
+var toggleBtn = document.getElementById('toggleLinksBtn');
+var tooltip = document.getElementById('tooltip-global');
+
+
+var noteBtn = document.getElementById('noteToggleBtn');
+if(noteBtn) noteBtn.style.display = 'none';
+var currentIndex = null;
+var linksVisible = false;
+
+function pad(n){ return n.toString().padStart(2,'0'); }
+
+// ===== FULLSCREEN HYBRID (nhúng <object> dùng parent; chạy độc lập dùng self) =====
+function _fsParent(action){
+  try{
+    if(window.parent && window.parent !== window){
+      window.parent.postMessage({type:'FS', action:action}, '*');
+      return true;
+    }
+  }catch(_){}
+  return false;
+}
+function _fsSelfEnter(){
+  var el = document.documentElement;
+  if(el.requestFullscreen) return el.requestFullscreen();
+  if(el.webkitRequestFullscreen) return el.webkitRequestFullscreen();
+  if(el.msRequestFullscreen) return el.msRequestFullscreen();
+}
+function _fsSelfExit(){
+  if(document.exitFullscreen) return document.exitFullscreen();
+  if(document.webkitExitFullscreen) return document.webkitExitFullscreen();
+  if(document.msExitFullscreen) return document.msRequestFullscreen ? document.msExitFullscreen() : undefined;
+}
+function enterFullscreen(){
+  if(_fsParent('enter')) return;
+  return _fsSelfEnter();
+}
+function exitFullscreen(){
+  if(_fsParent('exit')) return;
+  if(!document.fullscreenElement && !document.webkitFullscreenElement) return;
+  return _fsSelfExit();
+}
+function toggleFullscreen(){
+  if(_fsParent('toggle')) return;
+  if(document.fullscreenElement || document.webkitFullscreenElement) return _fsSelfExit();
+  return _fsSelfEnter();
+}
+
+// ===== LOAD LIST (hỗ trợ ?file=...) =====
+var params = new URLSearchParams(window.location.search);
+var listFile = params.get('file') || 'list.json';
+
+fetch(listFile)
+.then(function(r){ return r.json(); })
+.then(function(data){
+  items = Array.isArray(data) ? data : [];
+  links = items.map(function(i){ return i && i.link; });
+  titles = items.map(function(i){ return i && i.title; });
+  createButtons();
+  updateButtonLayout();
+})
+.catch(function(err){ console.error('Không load được file:', listFile, err); });
+
+// ===== CREATE BUTTONS =====
+function createButtons(){
+  linkContainer.innerHTML = '';
+
+  // tạo các nút link như cũ
+  links.forEach(function(_, i){
+    var b = document.createElement('button');
+    b.textContent = pad(i+1);
+    b.onclick = function(){ return showContent(i, true); };
+
+    // tooltip
+    b.dataset.tooltip = titles[i] || '';
+    b.onmouseenter = function(){
+      if(!b.dataset.tooltip) return;
+      tooltip.textContent = b.dataset.tooltip;
+      tooltip.style.opacity = 1;
+      var r = b.getBoundingClientRect();
+      tooltip.style.top = (r.bottom + 6) + 'px';
+      tooltip.style.left = r.left + 'px';
+    };
+    b.onmouseleave = function(){
+      tooltip.style.opacity = 0;
+    };
+
+    linkContainer.appendChild(b);
+  });
+}
+
+
+// ===== MENU LAYOUT: sát mép, chừa chỗ nút ☰ bằng padding =====
+function updateButtonLayout(){
+  const portrait = window.matchMedia("(orientation: portrait)").matches;
+
+  const btnSize = 44;
+  const gap = 6;
+  const cell = 56;
+  const perLine = 5;   // 👈 5 nút mỗi cột / hàng
+
+  linkContainer.style.display = linksVisible ? 'grid' : 'none';
+
+  // reset
+  linkContainer.style.gridTemplateColumns = '';
+  linkContainer.style.gridTemplateRows = '';
+  linkContainer.style.gridAutoFlow = '';
+  linkContainer.style.gridAutoColumns = '';
+  linkContainer.style.gridAutoRows = '';
+  linkContainer.style.overflowX = 'hidden';
+  linkContainer.style.overflowY = 'hidden';
+  linkContainer.style.padding = '0';
+
+  if(portrait){
+    // ===== PORTRAIT: 5 nút / 1 hàng → trượt dọc =====
+    linkContainer.style.width  = '100%';
+    linkContainer.style.height = '112px';
+
+    linkContainer.style.gridTemplateColumns = `repeat(${perLine}, ${cell}px)`;
+    linkContainer.style.gridAutoRows = `${cell}px`;
+    linkContainer.style.gridAutoFlow = 'row';
+
+    linkContainer.style.overflowY = 'auto';
+    linkContainer.style.overflowX = 'hidden';
+
+    linkContainer.style.paddingLeft = (btnSize + gap) + 'px';
+  }else{
+    // ===== LANDSCAPE: 5 nút / 1 cột → trượt ngang =====
+    linkContainer.style.height = '100%';
+    linkContainer.style.width  = '112px';
+
+    linkContainer.style.gridTemplateRows = `repeat(${perLine}, ${cell}px)`;
+    linkContainer.style.gridAutoColumns = `${cell}px`;
+    linkContainer.style.gridAutoFlow = 'column';
+
+    linkContainer.style.overflowX = 'auto';
+    linkContainer.style.overflowY = 'hidden';
+
+    linkContainer.style.paddingTop = (btnSize + gap) + 'px';
+  }
+}
+
+// ===== SHOW CONTENT (SAFE) =====
+function showContent(index, reload=false){
+  var _intro = document.getElementById('intro'); if(_intro && _intro.parentNode){ _intro.parentNode.removeChild(_intro); }
+
+  var item = items[index];
+  var url = (item && typeof item.link === 'string') ? item.link : '';
+
+  if(!url){
+    console.warn('Link không hợp lệ:', index, item);
+    return;
+  }
+
+  if(item && item.external === true){
+    window.top.location.href = url;
+    return;
+  }
+
+  if(reload || index !== currentIndex){
+    var sep = (url.indexOf('?') >= 0) ? '&' : '?';
+    document.getElementById('myDiv').data = url + sep + 't=' + Date.now();
+  }
+
+  currentIndex = index;
+  highlight(index);
+
+  linksVisible = false;
+  linkContainer.style.display = 'none';
+  toggleBtn.classList.remove('rotated');
+
+  try{ enterFullscreen(); }catch(_){}
+}
+
+function highlight(i){
+  linkContainer.querySelectorAll('button')
+    .forEach(function(b, idx){ b.classList.toggle('active', idx===i); });
+}
+
+// ===== TOGGLE MENU (Menu <-> Fullscreen) =====
+toggleBtn.onclick = function(e){
+  e && e.preventDefault && e.preventDefault();
+
+  linksVisible = !linksVisible;
+  // NOTE only shows when menu is open
+  if(noteBtn) noteBtn.style.display = linksVisible ? 'inline-flex' : 'none';
+  linkContainer.style.display = linksVisible ? 'grid' : 'none';
+  toggleBtn.classList.toggle('rotated', linksVisible);
+
+  try{
+    if(linksVisible){
+      exitFullscreen();
+    }else{
+      enterFullscreen();
+    }
+  }catch(_){}
+};
+
+window.addEventListener('resize', updateButtonLayout);
+</script>
+
+
+
+<script>
+/* ===== NOTE SYSTEM (vector strokes + lasso move) ===== */
+(function(){
+  var noteCanvas = document.getElementById("noteCanvas");
+  if(!noteCanvas) return;
+
+  var ctx = noteCanvas.getContext("2d");
+
+  var noteToggleBtn = document.getElementById("noteToggleBtn");
+  var annoBar = document.getElementById("annoBar");
+
+  var noteColorBtn = document.getElementById("noteColorBtn");
+  var noteSelectBtn = document.getElementById("noteSelectBtn");
+  var noteDelSelBtn = document.getElementById("noteDelSelBtn");
+
+  var noteClearBtn = document.getElementById("noteClearBtn");
+
+  var noteMenuBtn = document.getElementById("noteMenuBtn");
+  var noteMenuPanel = document.getElementById("noteMenuPanel");
+// ===== Group3 menu panel logic =====
+function toggleNoteMenuPanel(){
+  if(!noteMenuPanel) return;
+  if(noteMenuPanel.classList.contains('hidden')) noteMenuPanel.classList.remove('hidden');
+  else noteMenuPanel.classList.add('hidden');
+}
+function toggleNoteVisible(){
+  noteEnabled = !noteEnabled;
+  setEnabled(noteEnabled);
+  // 🔒 Hold menu = bật/tắt note và luôn đóng menu note
+  if(noteMenuPanel) noteMenuPanel.classList.add('hidden');
+}
+
+// Menu: tap mở panel / hold ẩn-hiện note
+bindTapHold(noteMenuBtn, function(){
+  toggleNoteMenuPanel();
+}, function(){
+  toggleNoteVisible();
+});
+  var noteInvertChk = document.getElementById("noteInvertChk");
+var noteUndoBtn = document.getElementById("noteUndoBtn");
+  var noteRedoBtn = document.getElementById("noteRedoBtn");
+
+  var noteModeBtn = document.getElementById("noteModeBtn");
+  var noteModePanel = document.getElementById("noteModePanel");
+  var noteShapeDash = document.getElementById("noteShapeDash");
+  var noteOptLabel = document.getElementById("noteOptLabel");
+  var optMode = "dash"; // "dash" | "invert" (tùy theo tool)
+
+  var enabled = false;
+  var visible = true;
+
+  // ===== palette (3 màu) =====
+  var COLORS_BASE = [
+    {key:'K', color:'#666666'},   // greyD
+    {key:'B', color:'#001373'},   // noteA (blue)
+    {key:'R', color:'#731300'}    // noteZ (red)
+  ];
+  var COLORS_INV  = [
+    {key:'K', color:'#999999'},   // greyL
+    {key:'B', color:'#FFEC8C'},   // yellow
+    {key:'R', color:'#8CECFF'}    // cyan
+  ];
+  var colorIdx = 0;
+  var invertMode = false; // false: base palette, true: inverted palette
+
+  function getActiveColor(){
+    return (invertMode ? COLORS_INV : COLORS_BASE)[colorIdx];
+  }
+
+  
+  function setInvert(on){
+    invertMode = !!on;
+    if(noteInvertChk) noteInvertChk.checked = invertMode;
+    // Nếu checkbox tùy chọn đang ở chế độ invert thì đồng bộ nó luôn
+    if(optMode === "invert" && noteShapeDash) noteShapeDash.checked = invertMode;
+    setColorBtnLabel();
+    renderAll();
+  }
+// ===== tools =====
+  var tool = "pen";           // "pen" | "erase"
+  var drawShape = "pen";      // "pen" | "line" | "rect" | "ellipse"
+  var shapeDash = false;      // solid/dash cho shape
+  var modeSelect = false;     // rect-lasso + move
+  var drawing = false;
+
+  // ===== strokes (vector) =====
+  /** stroke:
+   * { tool:'pen'|'erase', width:number, colorIdx:number, points:[{x,y},...], bbox:{L,T,R,B} }
+   * colorIdx lưu index 0..2; palette sẽ theo invertMode khi render
+   */
+  var STROKES = [];
+
+  // ===== undo/redo history (snapshot-based, ES5) =====
+  var undoStack = [];
+  var redoStack = [];
+  var histBefore = null;
+  var histActive = false;
+  function cloneStrokes(){
+    try{ return JSON.parse(JSON.stringify(STROKES)); }catch(_){ return []; }
+  }
+  function beginHistory(){
+    histBefore = cloneStrokes();
+    histActive = true;
+  }
+  function commitHistory(){
+    if(!histActive) return;
+    var after = cloneStrokes();
+    // tránh push nếu không đổi
+    try{
+      if(JSON.stringify(histBefore) === JSON.stringify(after)){
+        histActive = false; histBefore = null; return;
+      }
+    }catch(_){ }
+    undoStack.push({before: histBefore, after: after});
+    if(undoStack.length > 80) undoStack.shift();
+    redoStack.length = 0;
+    histActive = false;
+    histBefore = null;
+    updateUndoRedoUI();
+  }
+  function applySnapshot(snap){
+    STROKES = snap || [];
+    // rebind global ref used elsewhere
+  }
+  function doUndo(){
+    if(!undoStack.length) return;
+    var a = undoStack.pop();
+    redoStack.push(a);
+    STROKES = a.before || [];
+    clearSelection();
+    renderAll();
+    updateUndoRedoUI();
+  }
+  function doRedo(){
+    if(!redoStack.length) return;
+    var a = redoStack.pop();
+    undoStack.push(a);
+    STROKES = a.after || [];
+    clearSelection();
+    renderAll();
+    updateUndoRedoUI();
+  }
+  function updateUndoRedoUI(){
+    if(noteUndoBtn) noteUndoBtn.disabled = !undoStack.length;
+    if(noteRedoBtn) noteRedoBtn.disabled = !redoStack.length;
+  }
+
+  // ===== selection state =====
+  var selecting = false;
+  var movingSel = false;
+  var selStart = null;
+  var selRect = null; // {L,T,R,B}
+  var selected = [];  // indices in STROKES
+  var moveLast = null;
+
+  // ===== canvas resize (DPR-safe) =====
+  function resizeCanvas(){
+    var c = document.getElementById("content") || document.body;
+    var dpr = window.devicePixelRatio || 1;
+
+    var w = c.clientWidth || window.innerWidth;
+    var h = c.clientHeight || window.innerHeight;
+
+    noteCanvas.style.width = w + "px";
+    noteCanvas.style.height = h + "px";
+    noteCanvas.width = Math.max(1, Math.floor(w * dpr));
+    noteCanvas.height = Math.max(1, Math.floor(h * dpr));
+
+    // vẽ theo CSS px
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    renderAll(); // IMPORTANT: vector - không mất nét khi resize
+  }
+  window.addEventListener("resize", resizeCanvas);
+  setTimeout(resizeCanvas, 120);
+
+  function setEnabled(on){
+    enabled = !!on;
+    noteToggleBtn.classList.toggle("active", enabled);
+    annoBar.style.display = enabled ? "block" : "none";
+    noteCanvas.style.pointerEvents = enabled ? "auto" : "none";
+  }
+
+  
+  
+
+// ===== TEXT tool (natural inline editor - contenteditable) =====
+// tạo 1 div contenteditable nổi trên canvas để có caret + khung chọn tự nhiên như native
+var textEdit = document.createElement("div");
+textEdit.id = "noteTextEdit";
+textEdit.contentEditable = "true";
+textEdit.style.position = "fixed";
+textEdit.style.display = "none";
+textEdit.style.zIndex = 9999;
+textEdit.style.minWidth = "40px";
+textEdit.style.minHeight = "28px";
+textEdit.style.padding = "2px 4px";
+textEdit.style.border = "1px solid #6ea8ff";      // khung xanh nhạt như ảnh bạn gửi
+textEdit.style.borderRadius = "2px";
+textEdit.style.background = "transparent";
+textEdit.style.outline = "none";
+textEdit.style.whiteSpace = "pre-wrap";
+textEdit.style.userSelect = "text";
+textEdit.style.webkitUserSelect = "text";
+textEdit.style.webkitTouchCallout = "none";
+
+// font mặc định (có thể chỉnh sau)
+textEdit.style.fontFamily = "Arial, Helvetica, sans-serif";
+textEdit.style.fontSize = "44px";
+textEdit.style.lineHeight = "1.1";
+textEdit.style.color = "#000";
+
+document.body.appendChild(textEdit);
+
+var pendingTextPos = null; // {x,y} theo CSS px
+
+function openTextEditor(px){
+  pendingTextPos = {x: px.x, y: px.y};
+
+  // đặt editor gần điểm click, không vượt mép màn hình
+  var maxW = window.innerWidth - 20;
+  var maxH = window.innerHeight - 60;
+
+  var left = Math.max(8, Math.min(maxW, px.x));
+  var top  = Math.max(8, Math.min(maxH, px.y));
+
+  textEdit.style.left = left + "px";
+  textEdit.style.top  = top + "px";
+
+  // đồng bộ màu chữ theo palette hiện tại
+  try{
+    var c = COLORS[colorIdx];
+    if(c && c.color){
+      textEdit.style.color = c.color;
+    }
+  }catch(_){}
+
+  textEdit.textContent = "";
+  textEdit.style.display = "block";
+
+  // focus + đặt caret cuối
+  setTimeout(function(){
+    try{
+      textEdit.focus();
+      var range = document.createRange();
+      range.selectNodeContents(textEdit);
+      range.collapse(false);
+      var sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(range);
+    }catch(_){}
+  }, 0);
+}
+
+function closeTextEditor(){
+  textEdit.style.display = "none";
+  pendingTextPos = null;
+  try{ noteCanvas.focus(); }catch(_){}
+}
+
+function commitTextEditor(){
+  if(!pendingTextPos){ closeTextEditor(); return; }
+
+  // Lấy nội dung multi-line từ editor (Shift+Enter tạo <br> hoặc <div>)
+  var html = (textEdit.innerHTML || "");
+  // Chuẩn hoá: <div>/<p> -> <br>
+  html = html.replace(/\r\n/g, "\n");
+  html = html.replace(/<\/div>\s*<div>/gi, "<br>")
+             .replace(/<div>/gi, "")
+             .replace(/<\/div>/gi, "")
+             .replace(/<\/p>\s*<p>/gi, "<br>")
+             .replace(/<\/?p>/gi, "");
+  // <br> -> \n
+  var t = html.replace(/<br\s*\/?>/gi, "\n");
+
+  // entity cơ bản
+  t = t.replace(/&nbsp;/gi, " ")
+       .replace(/&amp;/gi, "&")
+       .replace(/&lt;/gi, "<")
+       .replace(/&gt;/gi, ">");
+
+  // trim cuối (giữ xuống dòng ở giữa)
+  t = (t || "").replace(/[ \t]+$/g, "").replace(/\n+$/g, "");
+  if(!t){ closeTextEditor(); return; }
+
+  // tạo text object giống logic cũ
+  var obj = {
+    type: "text",
+    text: t,
+    x: pendingTextPos.x,
+    y: pendingTextPos.y,
+    fontSize: parseFloat(textEdit.style.fontSize) || 44,
+    colorIdx: colorIdx
+  };
+  obj.bbox = bboxFromText(obj);
+  STROKES.push(obj);
+
+  closeTextEditor();
+  commitHistory();
+  renderAll();
+}
+
+// Enter = chốt (Shift+Enter = xuống dòng), Esc = hủy
+textEdit.addEventListener("keydown", function(ev){
+  ev = ev || window.event;
+  var key = ev.key || ev.keyCode;
+
+  if(key === "Escape" || key === 27){
+    try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+    closeTextEditor();
+    return;
+  }
+
+  if((key === "Enter" || key === 13) && !ev.shiftKey){
+    try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+    commitTextEditor();
+    return;
+  }
+}, false);
+
+// blur = chốt (tự nhiên như editor)
+textEdit.addEventListener("blur", function(){
+  setTimeout(function(){
+    if(textEdit.style.display !== "none"){
+      commitTextEditor();
+    }
+  }, 0);
+}, false);
+
+// ===== tap/hold helper (ES5) =====
+function bindTapHold(el, onTap, onHold){
+  if(!el) return;
+  var t = null, held = false, ignoreClick = false;
+
+  function clear(){
+    if(t){ clearTimeout(t); t = null; }
+  }
+  function prevent(ev){
+    try{
+      if(ev && ev.preventDefault) ev.preventDefault();
+      if(ev && ev.stopPropagation) ev.stopPropagation();
+    }catch(_){}
+  }
+  function down(ev){
+    held = false;
+    ignoreClick = false;
+    clear();
+    prevent(ev);
+    try{
+      if(el.setPointerCapture && ev && ev.pointerId != null){
+        el.setPointerCapture(ev.pointerId);
+      }
+    }catch(_){}
+    t = setTimeout(function(){
+      held = true;
+      ignoreClick = true;
+      if(onHold) onHold(ev);
+    }, 450);
+  }
+  function up(ev){
+    clear();
+    prevent(ev);
+    if(!held && onTap) onTap(ev);
+  }
+  function cancel(ev){ clear(); }
+  function clickBlock(ev){
+    if(ignoreClick){
+      prevent(ev);
+      ignoreClick = false;
+      return false;
+    }
+  }
+  el.addEventListener('pointerdown', down, {passive:false});
+  el.addEventListener('pointerup', up, {passive:false});
+  el.addEventListener('pointercancel', cancel, false);
+  el.addEventListener('pointerleave', cancel, false);
+  el.addEventListener('click', clickBlock, true);
+  el.addEventListener('contextmenu', function(ev){ prevent(ev); }, false);
+}
+
+// ===== UI buttons =====
+  noteToggleBtn.onclick = function(){ return setEnabled(!enabled); };
+
+  if(noteUndoBtn) noteUndoBtn.onclick = function(){ doUndo(); };
+  if(noteRedoBtn) noteRedoBtn.onclick = function(){ doRedo(); };
+  function setColorBtnLabel(){
+    if(!noteColorBtn) return;
+    if(tool === 'erase'){
+      noteColorBtn.textContent = '🧽';
+    }else{
+      noteColorBtn.textContent = getActiveColor().key;
+    }
+  }
+
+  function cycleColor(){
+    var L = invertMode ? COLORS_INV : COLORS_BASE;
+    colorIdx = (colorIdx + 1) % L.length;
+    tool = 'pen';
+    setColorBtnLabel();
+    renderAll();
+  }
+
+  function setEraser(){
+    tool = 'erase';
+    // khi eraser: ép về pen shape để không chồng mode
+    setDrawShape('pen');
+    setModeBtnUI('pen');
+    modeSelect = false;
+    noteSelectBtn.classList.remove('active');
+    clearSelection();
+    setColorBtnLabel();
+  }
+
+  // Color: tap đổi màu (nếu đang eraser thì quay về pen + giữ màu), hold = eraser
+  bindTapHold(noteColorBtn,
+    function(){
+      if(tool === 'erase'){
+        tool = 'pen';
+        setColorBtnLabel();
+        renderAll();
+      }else{
+        cycleColor();
+      }
+    },
+    function(){
+      setEraser();
+      renderAll();
+    }
+  );
+  window.addEventListener("keydown", function(ev){
+    var k = ev.key || ev.code;
+    var ctrl = ev.ctrlKey || ev.metaKey;
+    if(!ctrl) return;
+    if(k === "z" || k === "Z"){
+      ev.preventDefault();
+      if(ev.shiftKey) doRedo(); else doUndo();
+    }else if(k === "y" || k === "Y"){
+      ev.preventDefault();
+      doRedo();
+    }
+  });
+
+    if(noteInvertChk){
+    noteInvertChk.addEventListener('change', function(){
+      setInvert(!!noteInvertChk.checked);
+    });
+  }
+
+// ===== mode UI (button panel) + dash/invert option =====
+function setModeBtnUI(mode){
+  if(!noteModeBtn) return;
+  var iconMap = { pen:'✍️', text:'T', line:'/', rect:'▭', ellipse:'⬭' };
+  noteModeBtn.textContent = iconMap[mode] || '✍️';
+
+  if(noteModePanel){
+    var btns = noteModePanel.querySelectorAll('.modeBtn');
+    for(var i=0;i<btns.length;i++){
+      var b = btns[i];
+      b.classList.toggle('active', (b.getAttribute('data-mode') === mode));
+    }
+  }
+}
+
+function setDrawShape(mode){
+  drawShape = (mode || 'pen');
+
+  // optMode: khi pen/text -> checkbox là INVERT; còn shape -> checkbox là DASH
+  optMode = ((drawShape === 'pen' || drawShape === 'text') ? 'invert' : 'dash');
+
+  if(noteShapeDash){
+    noteShapeDash.disabled = false;
+    if(optMode === 'invert'){
+      noteShapeDash.checked = !!invertMode;
+    }else{
+      noteShapeDash.checked = !!shapeDash;
+    }
+  }
+
+  // Nếu đang chọn shape/text → tắt select/move để khỏi chồng mode
+  if(drawShape !== 'pen'){
+    tool = 'pen';
+    modeSelect = false;
+    if(noteSelectBtn) noteSelectBtn.classList.remove("active");
+    if(selRect) clearSelection();
+  }
+
+  setModeBtnUI(drawShape);
+}
+
+function toggleModePanel(){
+  if(!noteModePanel) return;
+  if(noteModePanel.classList.contains('hidden')) noteModePanel.classList.remove('hidden');
+  else noteModePanel.classList.add('hidden');
+}
+
+// Mode button: tap mở panel
+if(noteModeBtn){
+  noteModeBtn.addEventListener('click', function(ev){
+    try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+    // đóng panel group3 nếu đang mở
+    if(noteMenuPanel && !noteMenuPanel.classList.contains('hidden')) noteMenuPanel.classList.add('hidden');
+    toggleModePanel();
+  }, false);
+}
+
+// Click chọn mode trong panel
+if(noteModePanel){
+  noteModePanel.addEventListener('click', function(ev){
+    var t = ev.target;
+    // leo lên đúng button
+    while(t && t !== noteModePanel && (!t.classList || !t.classList.contains('modeBtn'))){
+      t = t.parentNode;
+    }
+    if(!t || t === noteModePanel) return;
+
+    var mode = t.getAttribute('data-mode') || 'pen';
+    setDrawShape(mode);
+
+    // đóng panel sau khi chọn
+    noteModePanel.classList.add('hidden');
+  }, false);
+}
+
+// Dash/Invert checkbox
+if(noteShapeDash){
+  noteShapeDash.addEventListener('change', function(){
+    if(optMode === 'invert'){
+      setInvert(!!noteShapeDash.checked);
+    }else{
+      shapeDash = !!noteShapeDash.checked;
+    }
+  });
+}
+
+// Click ra ngoài: đóng panel mode/menu
+document.addEventListener('click', function(ev){
+  try{
+    var t = ev && ev.target;
+    // Nếu click trong grpMode/grpOps hoặc trong panel thì KHÔNG đóng
+    if(t && t.closest){
+      if(t.closest('#grpMode') || t.closest('#grpOps') || t.closest('#noteModePanel') || t.closest('#noteMenuPanel')) return;
+    }
+    if(noteModePanel && !noteModePanel.classList.contains('hidden')) noteModePanel.classList.add('hidden');
+    if(noteMenuPanel && !noteMenuPanel.classList.contains('hidden')) noteMenuPanel.classList.add('hidden');
+  }catch(_){}
+}, false);
+
+noteClearBtn.onclick = function(){
+  beginHistory();
+  // Nếu đang có vùng chọn → xóa nhóm
+  if(selRect && selected.length){
+    selected.sort(function(a,b){ return b-a; }).forEach(function(i){
+      if(i>=0 && i<STROKES.length) STROKES.splice(i,1);
+    });
+    clearSelection();
+    renderAll();
+    commitHistory();
+    return;
+  }
+
+  // Không có vùng chọn → xóa tất cả
+  STROKES.length = 0;
+  clearSelection();
+  renderAll();
+  commitHistory();
+};
+
+
+  function toggleNoteVisible(){
+    visible = !visible;
+    noteCanvas.style.display = visible ? "block" : "none";
+  }
+
+    
+
+  noteSelectBtn.onclick = function(){
+    modeSelect = !modeSelect;
+    noteSelectBtn.classList.toggle("active", modeSelect);
+    tool = "pen"; // không dùng tool khi select
+    setDrawShape("pen");
+    if(!modeSelect) clearSelection();
+    renderAll();
+  };
+
+ 
+  // Khi mở menu ☰ thì tắt note để khỏi cấn thao tác
+  var _toggleBtn = document.getElementById("toggleLinksBtn");
+if(_toggleBtn){
+  // Tap: menu như cũ. Hold (450ms): ẩn/hiện lớp note (GV dùng), và không mở menu.
+  (function(){
+    var t=null, held=false;
+    _toggleBtn.addEventListener('pointerdown', function(ev){
+      held=false;
+      if(t){ clearTimeout(t); t=null; }
+      t=setTimeout(function(){
+        held=true;
+        toggleNoteVisible();
+      }, 450);
+    }, {passive:true});
+    _toggleBtn.addEventListener('pointerup', function(ev){
+      if(t){ clearTimeout(t); t=null; }
+      if(held){
+        try{ if(ev && ev.preventDefault) ev.preventDefault(); }catch(_){}
+        try{ if(ev && ev.stopPropagation) ev.stopPropagation(); }catch(_){}
+      }
+    }, {passive:false});
+    _toggleBtn.addEventListener('pointercancel', function(){
+      if(t){ clearTimeout(t); t=null; }
+    }, false);
+  })();
+
+  _toggleBtn.addEventListener("click", function(){
+    // Chỉ tắt note khi ĐANG MỞ menu (linksVisible đang false trước khi toggle)
+    // Khi đang đóng menu (linksVisible=true) thì giữ nguyên để không "mất" nút note.
+    try{
+      if(typeof linksVisible !== 'undefined' && linksVisible){
+        return;
+      }
+    }catch(_){}
+    setEnabled(false);
+  }, true);
+}
+// ===== helpers =====
+  function getPos(e){
+    var r = noteCanvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left), y: (e.clientY - r.top) };
+  }
+  function normRect(a,b){
+    var L = Math.min(a.x,b.x), R = Math.max(a.x,b.x);
+    var T = Math.min(a.y,b.y), B = Math.max(a.y,b.y);
+    return {L,T,R,B};
+  }
+  function pointInRect(p, r){
+    return r && p.x>=r.L && p.x<=r.R && p.y>=r.T && p.y<=r.B;
+  }
+
+  // ===== Corner-handle scale (mobile) =====
+  var HANDLE_R = 22; // px (tăng/giảm cho dễ bấm)
+  var scalingSel = false;
+  var scaleLastDist = 0;
+
+  function dist2(a,b){
+    var dx=a.x-b.x, dy=a.y-b.y;
+    return Math.sqrt(dx*dx+dy*dy);
+  }
+  function rectCenterPx(r){
+    return { x:(r.L+r.R)/2, y:(r.T+r.B)/2 };
+  }
+  function nearCorner(p, r){
+    var corners = [
+      {x:r.L, y:r.T},
+      {x:r.R, y:r.T},
+      {x:r.L, y:r.B},
+      {x:r.R, y:r.B},
+    ];
+    for(var ci=0; ci<corners.length; ci++){ var c = corners[ci];
+      if(dist2(p,c) <= HANDLE_R) return true;
+    }
+    return false;
+  }
+  function scaleSelectedRelative(s){
+    if(!selRect || !selected.length) return;
+    var c = rectCenterPx(selRect);
+
+    for(var si=0; si<selected.length; si++){ var idx = selected[si];
+      var st = STROKES[idx];
+      if(!st) continue;
+
+      // shape
+      if(st.type === 'shape'){
+        st.x0 = c.x + (st.x0 - c.x) * s;
+        st.y0 = c.y + (st.y0 - c.y) * s;
+        st.x1 = c.x + (st.x1 - c.x) * s;
+        st.y1 = c.y + (st.y1 - c.y) * s;
+        st.bbox = bboxFromShape(st);
+        continue;
+      }
+
+      // freehand
+      // text
+      if(st.type === "text"){
+        st.x = c.x + (st.x - c.x) * s;
+        st.y = c.y + (st.y - c.y) * s;
+        st.fontSize = Math.max(10, Math.min(96, (st.fontSize || 22) * s));
+        st.bbox = bboxFromText(st);
+        continue;
+      }
+
+
+      if(!st.points) continue;
+      for(var pi=0; pi<st.points.length; pi++){ var pt = st.points[pi];
+        pt.x = c.x + (pt.x - c.x) * s;
+        pt.y = c.y + (pt.y - c.y) * s;
+      }
+      st.bbox = bboxFromPoints(st.points);
+    }
+
+    // scale lại selRect
+    selRect = {
+      L: c.x + (selRect.L - c.x) * s,
+      R: c.x + (selRect.R - c.x) * s,
+      T: c.y + (selRect.T - c.y) * s,
+      B: c.y + (selRect.B - c.y) * s
+    };
+  }
+
+  function intersects(r1, r2){
+    return !(r1.R<r2.L || r1.L>r2.R || r1.B<r2.T || r1.T>r2.B);
+  }
+  function bboxFromPoints(pts){
+    var L=Infinity,T=Infinity,R=-Infinity,B=-Infinity;
+    for(var pi2=0; pi2<pts.length; pi2++){ var p = pts[pi2];
+      if(p.x<L) L=p.x; if(p.x>R) R=p.x;
+      if(p.y<T) T=p.y; if(p.y>B) B=p.y;
+    }
+    if(!isFinite(L)) return {L:0,T:0,R:0,B:0};
+    return {L,T,R,B};
+  }
+
+  function bboxFromShape(s){
+    var x0 = s.x0, y0 = s.y0, x1 = s.x1, y1 = s.y1;
+    var L = Math.min(x0,x1), R = Math.max(x0,x1);
+    var T = Math.min(y0,y1), B = Math.max(y0,y1);
+    return {L,T,R,B};
+  }
+
+  function bboxFromText(t){
+    var fs = t.fontSize || 22;
+    var lh = fs * 1.2;
+    var lines = String(t.text || "").split("\n");
+
+    ctx.save();
+    ctx.font = fs + "px Arial";
+
+    var w = 0;
+    for(var i=0;i<lines.length;i++){
+      var line = lines[i] || "";
+      var wi = 0;
+      try{ wi = ctx.measureText(line).width; }catch(_){ wi = line.length * fs * 0.6; }
+      if(wi > w) w = wi;
+    }
+    ctx.restore();
+
+    var h = Math.max(1, lines.length) * lh;
+    return {L:t.x, T:t.y, R:t.x + w, B:t.y + h};
+  }
+
+  function clearSelection(){
+    selecting = false;
+    movingSel = false;
+    scalingSel = false;
+    selStart = null;
+    selRect = null;
+    selected = [];
+    moveLast = null;
+    scaleLastDist = 0;
+  }
+  function updateSelectedFromRect(){
+    if(!selRect){ selected=[]; return; }
+    var picks = [];
+    for(var i=0;i<STROKES.length;i++){
+      var bb = STROKES[i].bbox;
+      if(bb && intersects(bb, selRect)) picks.push(i);
+    }
+    selected = picks;
+  }
+
+  // ===== rendering =====
+  function renderAll(){
+    var dpr = window.devicePixelRatio || 1;
+    var w = noteCanvas.width / dpr;
+    var h = noteCanvas.height / dpr;
+    ctx.clearRect(0,0,w,h);
+
+    for(var i=0;i<STROKES.length;i++){
+      var s = STROKES[i];
+      if(!s) continue;
+
+      // ===== text objects =====
+      if(s.type === "text"){
+        ctx.globalCompositeOperation = "source-over";
+        var palT = invertMode ? COLORS_INV : COLORS_BASE;
+        ctx.fillStyle = ((palT[s.colorIdx] && palT[s.colorIdx].color) || getActiveColor().color);
+        var fsT = s.fontSize || 22;
+        var lhT = fsT * 1.2;
+        ctx.font = fsT + "px Arial";
+        ctx.textBaseline = "top";
+        ctx.setLineDash([]);
+
+        var linesT = String(s.text || "").split("\n");
+        for(var li=0; li<linesT.length; li++){
+          ctx.fillText(linesT[li] || "", s.x, s.y + li * lhT);
+        }
+
+        // keep bbox fresh
+        s.bbox = bboxFromText(s);
+        continue;
+      }
+
+      // ===== shape objects =====
+      if(s.type === 'shape'){
+        var pal = invertMode ? COLORS_INV : COLORS_BASE;
+        ctx.globalCompositeOperation = "source-over";
+        ctx.lineCap="round";
+        ctx.lineJoin="round";
+        ctx.lineWidth = s.width || 3;
+        ctx.strokeStyle = ((pal[s.colorIdx] && pal[s.colorIdx].color) || getActiveColor().color);
+
+        // solid/dash
+        var w0 = ctx.lineWidth || 3;
+        var d = Math.max(6, w0 * 2.5);
+        ctx.setLineDash(s.dash ? [d, d] : []);
+
+        var x0 = s.x0, y0 = s.y0, x1 = s.x1, y1 = s.y1;
+        var L = Math.min(x0,x1), R = Math.max(x0,x1);
+        var T = Math.min(y0,y1), B = Math.max(y0,y1);
+
+        ctx.beginPath();
+        if(s.shape === 'line'){
+          ctx.moveTo(x0,y0); ctx.lineTo(x1,y1);
+        }else if(s.shape === 'rect'){
+          ctx.rect(L, T, (R-L), (B-T));
+        }else if(s.shape === 'ellipse'){
+          var cx=(L+R)/2, cy=(T+B)/2;
+          var rx=Math.max(1, (R-L)/2), ry=Math.max(1, (B-T)/2);
+          ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI*2);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+        continue;
+      }
+
+      // ===== freehand strokes (current format) =====
+      var pts = s.points;
+      if(!pts || pts.length<2) continue;
+
+      ctx.lineCap="round";
+      ctx.lineJoin="round";
+      ctx.lineWidth = s.width;
+
+      if(s.tool === "erase"){
+        ctx.globalCompositeOperation = "destination-out";
+        ctx.strokeStyle = "rgba(0,0,0,1)";
+      }else{
+        ctx.globalCompositeOperation = "source-over";
+        var pal = invertMode ? COLORS_INV : COLORS_BASE;
+        ctx.strokeStyle = ((pal[s.colorIdx] && pal[s.colorIdx].color) || getActiveColor().color);
+      }
+
+      ctx.beginPath();
+      ctx.moveTo(pts[0].x, pts[0].y);
+      for(var k=1;k<pts.length;k++) ctx.lineTo(pts[k].x, pts[k].y);
+      ctx.stroke();
+    }
+
+    ctx.globalCompositeOperation = "source-over";
+
+    if(modeSelect && selRect){
+      ctx.save();
+      ctx.setLineDash([8,6]);
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = invertMode ? "#ffffff" : "#000000";
+      ctx.strokeRect(selRect.L, selRect.T, selRect.R-selRect.L, selRect.B-selRect.T);
+      // handles 4 góc (mobile)
+      var hs = 10;
+      ctx.setLineDash([]);
+      ctx.fillStyle = ctx.strokeStyle;
+      ctx.fillRect(selRect.L - hs/2, selRect.T - hs/2, hs, hs);
+      ctx.fillRect(selRect.R - hs/2, selRect.T - hs/2, hs, hs);
+      ctx.fillRect(selRect.L - hs/2, selRect.B - hs/2, hs, hs);
+      ctx.fillRect(selRect.R - hs/2, selRect.B - hs/2, hs, hs);
+      ctx.restore();
+    }
+
+    if(modeSelect && selected.length){
+      ctx.save();
+      ctx.setLineDash([4,4]);
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = invertMode ? "#ffffff" : "#000000";
+      for(var si=0; si<selected.length; si++){ var idx = selected[si];
+        var bb = (STROKES[idx] && STROKES[idx].bbox);
+        if(!bb) continue;
+        ctx.strokeRect(bb.L-2, bb.T-2, (bb.R-bb.L)+4, (bb.B-bb.T)+4);
+      }
+      ctx.restore();
+    }
+  }
+
+  // ===== pointer events =====
+  var currentStroke = null;
+
+  noteCanvas.addEventListener("pointerdown", function(e){
+    if(!enabled) return;
+    var p = getPos(e);
+    try{ noteCanvas.setPointerCapture(e.pointerId); }catch(_){ }
+
+    if(modeSelect){
+      if(selRect && pointInRect(p, selRect) && selected.length){
+        // gần góc -> SCALE, còn lại -> MOVE
+        if(nearCorner(p, selRect)){
+          beginHistory();
+          scalingSel = true;
+          movingSel = false;
+          selecting = false;
+          var c = rectCenterPx(selRect);
+          scaleLastDist = Math.max(1, dist2(p, c));
+          moveLast = null;
+          return;
+        }else{
+          beginHistory();
+          movingSel = true;
+          scalingSel = false;
+          moveLast = p;
+          selecting = false;
+          return;
+        }
+      }
+      selecting = true;
+      movingSel = false;
+      selStart = p;
+      selRect = normRect(selStart, p);
+      updateSelectedFromRect();
+      renderAll();
+      return;
+    }
+
+    drawing = true;
+
+    // ===== shape drawing =====
+    if(drawShape && drawShape !== 'pen'){
+      beginHistory();
+      if(drawShape === "text"){
+        if(selRect) clearSelection();
+        openTextEditor(p);
+        return;
+      }
+      // bỏ selection khi bắt đầu vẽ shape
+      if(selRect) clearSelection();
+
+      currentStroke = {
+        type: 'shape',
+        shape: drawShape,      // line|rect|ellipse
+        dash: !!shapeDash,
+        width: 3,
+        colorIdx: colorIdx,
+        x0: p.x, y0: p.y,
+        x1: p.x, y1: p.y,
+        bbox: {L:p.x,T:p.y,R:p.x,B:p.y}
+      };
+      STROKES.push(currentStroke);
+      renderAll();
+      return;
+    }
+
+    // ===== freehand stroke / eraser =====
+    beginHistory();
+    currentStroke = {
+      tool: tool,
+      width: (tool==="erase") ? 25 : 3,
+      colorIdx: colorIdx,
+      points: [p],
+      bbox: {L:p.x,T:p.y,R:p.x,B:p.y}
+    };
+    STROKES.push(currentStroke);
+  });
+
+  noteCanvas.addEventListener("pointermove", function(e){
+    if(!enabled) return;
+    var p = getPos(e);
+
+    if(modeSelect){
+      if(scalingSel && selRect && selected.length){
+        var c = rectCenterPx(selRect);
+        var d1 = Math.max(1, dist2(p, c));
+        var s = d1 / Math.max(1, scaleLastDist);
+        var ss = Math.min(3, Math.max(0.33, s)); // kẹp để khỏi nhảy
+        scaleSelectedRelative(ss);
+        scaleLastDist = d1;
+        renderAll();
+        return;
+      }
+
+      if(selecting && selStart){
+        selRect = normRect(selStart, p);
+        updateSelectedFromRect();
+        renderAll();
+        return;
+      }
+      if(movingSel && moveLast && selected.length){
+        var dx = p.x - moveLast.x;
+        var dy = p.y - moveLast.y;
+
+        for(var si=0; si<selected.length; si++){ var idx = selected[si];
+          var s = STROKES[idx];
+          if(!s) continue;
+
+          if(s.type === 'shape'){
+            s.x0 += dx; s.y0 += dy;
+            s.x1 += dx; s.y1 += dy;
+            s.bbox = bboxFromShape(s);
+            continue;
+          }
+          if(s.type === "text"){
+            s.x += dx; s.y += dy;
+            s.bbox = bboxFromText(s);
+            continue;
+          }
+
+          var _pts = (s.points||[]); for(var pi3=0; pi3<_pts.length; pi3++){ var pt = _pts[pi3];
+            pt.x += dx; pt.y += dy;
+          }
+          if(s.points) s.bbox = bboxFromPoints(s.points);
+        }
+
+        if(selRect){
+          selRect = {L:selRect.L+dx, T:selRect.T+dy, R:selRect.R+dx, B:selRect.B+dy};
+        }
+
+        moveLast = p;
+        renderAll();
+        return;
+      }
+      return;
+    }
+
+    if(!drawing || !currentStroke) return;
+
+    // shape drag-update
+    if(currentStroke.type === 'shape'){
+      currentStroke.x1 = p.x;
+      currentStroke.y1 = p.y;
+      currentStroke.bbox = bboxFromShape(currentStroke);
+      renderAll();
+      return;
+    }
+
+    // freehand
+    currentStroke.points.push(p);
+    currentStroke.bbox = bboxFromPoints(currentStroke.points);
+    renderAll();
+  });
+
+  function stopAll(){
+    var last = currentStroke;
+    drawing = false;
+    currentStroke = null;
+
+    // nếu shape quá nhỏ -> bỏ (tránh click tạo rác)
+    if(last && last.type === 'shape'){
+      var bb = last.bbox || bboxFromShape(last);
+      var w = (bb.R - bb.L), h = (bb.B - bb.T);
+      if(Math.max(w,h) < 6){
+        var j = STROKES.lastIndexOf(last);
+        if(j >= 0) STROKES.splice(j,1);
+      }
+    }
+
+    if(selecting){
+      selecting = false;
+      renderAll();
+    }
+    if(movingSel){
+      movingSel = false;
+      moveLast = null;
+      renderAll();
+    }
+    if(scalingSel){
+      scalingSel = false;
+      scaleLastDist = 0;
+      renderAll();
+    }
+
+    // commit history once after action ends
+    commitHistory();
+  }
+  window.addEventListener("pointerup", stopAll);
+  window.addEventListener("pointercancel", stopAll);
+  window.addEventListener("blur", stopAll);
+  // init
+  if(noteInvertChk) noteInvertChk.checked = invertMode;
+  setColorBtnLabel();
+  if(noteShapeDash) noteShapeDash.checked = false;
+  setDrawShape("pen");
+  setEnabled(false);
+  renderAll();
+  updateUndoRedoUI();
+})();
+</script>
+
+
+
+<!-- ===== Fullscreen Safe Patch v4 (auto-added) ===== -->
+<script>
+(function(){
+  function _safeFS(p){
+    try{
+      if(p && typeof p.catch === 'function') p.catch(function(){});
+    }catch(_){}
+    return p;
+  }
+
+  const _origEnter = window.enterFullscreen;
+  const _origExit  = window.exitFullscreen;
+  const _origToggle = window.toggleFullscreen;
+
+  window.enterFullscreen = function(){
+    if(document.visibilityState && document.visibilityState !== 'visible') return;
+    if(typeof _origEnter === 'function'){
+      return _safeFS(_origEnter());
+    }
+  };
+
+  window.exitFullscreen = function(){
+    if(!(document.fullscreenElement || document.webkitFullscreenElement)) return;
+    if(document.visibilityState && document.visibilityState !== 'visible') return;
+    if(typeof _origExit === 'function'){
+      return _safeFS(_origExit());
+    }
+  };
+
+  window.toggleFullscreen = function(){
+    if(document.visibilityState && document.visibilityState !== 'visible') return;
+    if(document.fullscreenElement || document.webkitFullscreenElement){
+      if(typeof _origExit === 'function') return _safeFS(_origExit());
+    }else{
+      if(typeof _origEnter === 'function') return _safeFS(_origEnter());
+    }
+  };
+})();
+</script>
+<!-- ===== End Patch ===== -->
+
+</body>
+</html>
