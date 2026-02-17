@@ -10,11 +10,21 @@
   <meta http-equiv="Expires" content="0">
   <meta http-equiv="expires" content="timestamp" />
 
-  <script src="./jquery/jquery.min.js"></script>
-  <script src="./jquery/jquery-ui.min.js"></script>
-  <link rel="stylesheet" href="./jquery/jquery-ui.css">
+  <script src="./web/jquery/jquery.min.js"></script>
+  <script src="./web/jquery/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="./web/jquery/jquery-ui.css">
 
-  <style>  
+  <style> 
+  .visitor {
+            position: fixed;
+            bottom: 0;
+            right: 0;
+            padding: 0px;
+            
+            color: #808080;
+            font-size: 16px;
+            border-radius: 5px 0 0 0;
+        } 
     body::-webkit-scrollbar { display: none; }
     body { -ms-overflow-style: none; scrollbar-width: none; overflow:hidden; padding: 0; margin: 0; }
     input[type="text"]{position:relative;display:block;margin:0 auto}
@@ -42,6 +52,7 @@
 
 <body>
   <span><button id="reloadBtn" onclick="reloadPage();" style="justify-content: center;align-items: center; top:50%; left:50%;position:absolute;font-size:200%;">HI</button></span>
+  <br>
   <div class="container-main" id="clock" style="font-size:150%;text-align: center; display:none;"></div>
   <div class="container-info"><input id="textm" class="myTextBox" type="text" style="font-size:150%;width:50vw;line-height:125%;text-align:center;margin:auto;display:none;" maxlength="4" size="2" placeholder="&#9990;&nbsp; 0377414995" /></div> 
   <div id="demo" class="relative" title="Bài tập"></div> 
@@ -53,6 +64,7 @@ const urlB="https://script.google.com/macros/s/AKfycbxWO2DBJqDennWZKibVULZUKLxI3
 const urlC="https://script.google.com/macros/s/AKfycby4E8OCz76fPXPknjoGsibJsNhN2M_ofezrgpecJkIxgu4tIBBhMZ3qET6MtWxZbx9t/exec";
 const urlD="https://script.google.com/macros/s/AKfycbxXbJ52tGMyJlXf8As5JekaqNsIdojgPAVbbMHORr2NO-kZH3NA8AQMMCLhNAeBJd3O/exec";
 const urlE="https://script.google.com/macros/s/AKfycbyyKiKgH1xw2JgZEqYxAZDpIqQmr6gCTuMgTZqfhGFA0M4l_7GOl2ljtFGgqpInVAem/exec";
+    urlF="https://script.google.com/macros/s/AKfycbwM1YbVN-4WCs2MJa4X8sTIqlYQrPnY5J_I8hZn_Sc34rPpoasirY7frdBelkDyhgV2/exec"
 function reloadPage() {
   const reloadButton = document.getElementById("reloadBtn");
   reloadButton.style.display = "none";
@@ -94,8 +106,8 @@ function myTimer() {
   const today = new Date();
   today.setHours(today.getHours()+7); 
   document.getElementById("clock").innerHTML = "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;" + today.toISOString().substring(0,10) + "&nbsp;&#9788;&nbsp;" + today.toISOString().substring(11,19);
-  var bd ="2024-12-27T23:59";
-  var db ="";
+  var bd ="2025-09-05T23:59";
+    var db ="2026-05-31T23:59";
   var ngaybd=new Date(bd);
   var ngaydb=new Date(db); 
   const now = new Date();
@@ -122,11 +134,12 @@ function myFunction(){
   var m=document.getElementById("textm").value;
   var text;
   switch (m) {
-    case "2402": text ="FmkQ.html?url="+urlA; break;
-    case "2406": text ="FmkQ.html?url="+urlB; break;
-    case "2407": text="FmkQ.html?url="+urlC; break;
-    case "2202": text="FmkQ.html?url="+urlD; break;
-    case "2213": text="FmkQ.html?url="+urlE; break;
+    case "2501": text ="./web/FmkQ.html?url="+urlA; break;
+    case "2505": text ="./web/FmkQ.html?url="+urlB; break;
+    case "2512": text="./web/FmkQ.html?url="+urlC; break;
+    case "2307": text="./web/FmkQ.html?url="+urlD; break;
+    case "2310": text="./web/FmkQ.html?url="+urlE; break;
+    
     default: text=""; break;
   }
   document.getElementById("iframeL").data = text;
@@ -138,11 +151,13 @@ function Bfunction(){
   var m=document.getElementById("textm").value;
   var text;
   switch (m) {
-    case "2402": text = "./web/forma2.html"; break;
-    case "2406": text = "./web/forma6.html"; break;
-    case "2407": text= "./web/forma7.html"; break;
-    case "2202": text= "./web/texpp.html"; break;
-    case "2213": text= "./web/texpp.html"; break;
+    case "2501": text ="./web/formL.html?file=questionsCD.js&script="+urlA;break;
+    case "2505": text = "./web/formL.html?file=questionsCD.js&script="+urlB; break;
+    case "2512": text= "./web/formL.html?file=questions.js&script="+urlC; break;
+    case "2307": text= "./web/boardBo.html"; break;
+    case "2310": text= "./web/boardBo.html"; break;
+    case "0808":text= "./web/formL.html?file=questionsCD.js&script="+urlF; break;
+    case "0000":text= "./web/boardBo.html?file=list0.json"; break;
     default: text=""; break;
   }
   if(text!=""){
@@ -164,6 +179,81 @@ document.getElementById("textm").addEventListener("keypress", function(event) {
     Bfunction();
   }
 });
+</script>
+
+
+    <script>
+let startY = 0;
+let tracking = false;
+const SWIPE_THRESHOLD = 60;
+
+// ---------- TOUCH ----------
+document.addEventListener("touchstart", (e) => {
+  if (e.touches.length !== 1) return;
+  startY = e.touches[0].clientY;
+  tracking = true;
+}, { passive: true });
+
+document.addEventListener("touchmove", (e) => {
+  if (!tracking) return;
+  const dy = startY - e.touches[0].clientY;
+  if (Math.abs(dy) > 20) e.preventDefault(); // chặn scroll khi vuốt mạnh
+}, { passive: false });
+
+document.addEventListener("touchend", (e) => {
+  if (!tracking) return;
+  tracking = false;
+
+  const endY = e.changedTouches[0].clientY;
+  const diffY = startY - endY;
+
+  if (Math.abs(diffY) > SWIPE_THRESHOLD) {
+    toggleFullscreen();
+  }
+}, { passive: true });
+
+// ---------- KEYBOARD ----------
+document.addEventListener("keydown", (e) => {
+  if (e.shiftKey && e.code === "Space") {
+    e.preventDefault(); // tránh scroll
+    toggleFullscreen();
+  }
+});
+
+// ---------- FULLSCREEN CORE ----------
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+function enterFullscreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) elem.requestFullscreen();
+  else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+  else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+}
+
+
+// ===== FULLSCREEN BRIDGE (for <object> embedded docs) =====
+window.addEventListener('message', function(ev){
+  try{
+    const d = ev.data;
+    if(!d || typeof d !== 'object') return;
+    if(d.type !== 'FS') return;
+    if(d.action === 'enter') enterFullscreen();
+    else if(d.action === 'exit') exitFullscreen();
+    else if(d.action === 'toggle') toggleFullscreen();
+  }catch(_){}
+}, false);
 </script>
 
 </body>
