@@ -1,0 +1,2829 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>Slideous — Marked (Regex‑Free)</title>
+<link rel="icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR4nGMAAQAABQABDQottAAAAABJRU5ErkJggg==">
+<style>
+
+/* ===== LANDSCAPE: left side, from bottom up ===== */
+@media (orientation: landscape){
+  #dotNavSlides{
+    position: fixed !important;
+
+    left: calc(10px + var(--safe-left)) !important;
+    right: auto !important;
+    bottom: calc(10px + var(--safe-bottom)) !important;
+    top: auto !important;
+
+    transform: none !important;
+
+    display: flex !important;
+    flex-direction: column-reverse !important; /* từ dưới lên */
+
+    gap: 10px;
+    padding: 8px 6px;
+
+    max-height: 70vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+
+    z-index: 50;
+  }
+}
+
+/* ===== PORTRAIT: top, from right to left ===== */
+@media (orientation: portrait){
+  #dotNavSlides{
+    position: fixed !important;
+
+    top: calc(10px + var(--safe-top)) !important;
+    right: calc(10px + var(--safe-right)) !important;
+    left: auto !important;
+    bottom: auto !important;
+
+    transform: none !important;
+
+    display: flex !important;
+    flex-direction: row-reverse !important; /* từ phải qua */
+
+    gap: 10px;
+    padding: 6px 8px;
+
+    max-height: 40px;
+    overflow-x: auto;
+    overflow-y: hidden;
+
+    z-index: 50;
+  }
+}
+.dotBtn{
+  width: 14px;
+  height: 14px;
+  border-radius: 999px;
+  border: 2px solid rgba(0,0,0,.70);
+  background: transparent;
+  opacity: .85;
+  cursor: pointer;
+  padding: 0;
+  flex: 0 0 auto;
+}
+html.inverted .dotBtn{
+  border-color: rgba(255,255,255,.80);
+}
+.dotBtn.active{
+  background: rgba(0,0,0,.85);
+  border-color: rgba(0,0,0,.85);
+  opacity: .95;
+}
+html.inverted .dotBtn.active{
+  background: rgba(255,255,255,.90);
+  border-color: rgba(255,255,255,.90);
+}
+#dotNavSlides{ color: #000; }
+html.inverted #dotNavSlides{ color: #fff; }
+@media (pointer: coarse){
+  .dotBtn{ width: 16px; height: 16px; }
+  #dotNavSlides{ left: 14px; }
+  @media (orientation: portrait){
+    #dotNavSlides{ top: 12px; }
+  }
+}
+@media (orientation: landscape){
+  #dotNavSlides{ left: 14px;  }
+}
+#dotNavItems{ bottom: 12px; }
+
+
+
+
+/* === SVG FIT DIV STANDARD (system-wide) === */
+svg.ov{
+  width: 100%;
+  height: 100%;
+  display: block;
+  margin: 0;
+}
+:root{
+  /* LIGHT paper mode */
+  --ui-bg:#ffffff;
+  --ui-fg:#000000;
+  --svg-fg:#000000;
+  --svg-ac:#1e40af;
+  --greyL:#666666;      /* grey on WHITE */
+  --greyD:#999999;      /* grey on BLACK */
+  --gray:  var(--greyL);
+  --svg-gray:var(--gray);
+color-scheme: light dark;
+  --bg: #000000; --fg:#ffffff; --muted:#94a3b8; --card:#0f172a;
+  --accent:#2563eb; --shadow: 0 8px 30px #00000059; --radius: 16px;
+  --space: clamp(12px, 2vw, 24px);
+  --slide-w: min(1100px, 95vw); --slide-min-h: min(70vh, 900px);
+  --font: system-ui, Segoe UI, Arial, sans-serif;
+  --fz-base: clamp(16px, 3vw, 20px);
+
+  --fz-h1: clamp(26px, 5.4vw, 40px);
+  --fz-h2: clamp(22px, 4.6vw, 32px);
+  --fz-h3: clamp(18px, 3.6vw, 26px);
+  --fx-dur: 700ms; --fx-dur-out: 550ms; --fx-delay: 0ms;
+  --fx-ease: cubic-bezier(.22,.61,.36,1); --fx-ease-out: cubic-bezier(.4,0,.2,1);
+}
+* { box-sizing: border-box; } html, body { height: 100%; }
+body { margin: 0; font-family: var(--font); background: var(--bg); color: var(--fg); font-size: var(--fz-base); -webkit-tap-highlight-color: transparent; }
+#toolbar { position: sticky; top: env(safe-area-inset-top, 0); display: flex; align-items: center; justify-content: flex-end; gap: 8px;
+  padding: 8px calc(var(--space) - 2px); background: var(--card); box-shadow: 0 2px 10px #0000004c; z-index: 10; }
+#error { margin: 12px auto; width: min(900px, 92vw); background: #fee2e2; color: #7f1d1d; border: 1px solid #fecaca; border-radius: 10px; padding: .8rem 1rem; box-shadow: 0 6px 18px #00000014; display:none; }
+#progress { position: fixed; left: 0; bottom: env(safe-area-inset-bottom, 0); height: 4px; width: 0%; background: linear-gradient(90deg, #0066ff, #9f46f3); z-index: 9; transition: width .25s ease; }
+#deck { padding: var(--space); min-height: calc(100vh - 56px); outline: none; }
+.slide { width: var(--slide-w); min-height: var(--slide-min-h); margin: var(--space) auto; padding: clamp(16px, 2.5vw, 36px);
+  border-radius: var(--radius); background: var(--card); box-shadow: var(--shadow); }
+h1 { font-size: var(--fz-h1); margin: 0 0 .6em; } h2 { font-size: var(--fz-h2); margin: 0 0 .5em; } h3 { font-size: var(--fz-h3); margin: 0 0 .4em; }
+p { line-height: 1.5; } blockquote { border-left: 4px solid var(--muted); color: var(--muted); padding-left: .8rem; }
+table { border-collapse: collapse; width: 100%; margin: .6rem 0; }
+td, th { border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent); padding: .35rem .5rem; }
+code, pre { background: color-mix(in oklab, var(--fg) 14%, transparent); border-radius: .5rem; } pre { padding: .6rem .8rem; overflow: auto; }
+img { max-width: 100%; height: auto; border-radius: .6rem; cursor: zoom-in; }
+@media (max-width: 640px) { #deck { padding: calc(var(--space) * .6); } .slide { padding: clamp(12px, 3.4vw, 20px); border-radius: 14px; } }
+/* Incremental & typing */
+.inc { opacity: 0; transform: translateY(6px); }
+.inc.show { opacity: 1; transform: none; transition: all .28s ease-out; }
+.type.typing { border-right: 2px solid currentColor; animation: caret .9s step-end infinite; }
+@keyframes caret { 50% { border-color: transparent; } }
+.type .ch { visibility: hidden; white-space: pre; } .type .ch.show { visibility: visible; }
+/* FX */
+.fx, .fx * { backface-visibility: hidden; transform-style: preserve-3d; }
+.fx-fade-in { opacity: 0; } .fx-fade-in.run-in { animation: fxFadeIn var(--fx-dur) var(--fx-ease) var(--fx-delay) both; }
+@keyframes fxFadeIn { from { opacity: 0; } to { opacity: 1; } }
+.fx-fade-out.run-out { animation: fxFadeOut var(--fx-dur-out) var(--fx-ease-out) var(--fx-delay) both; }
+@keyframes fxFadeOut { from { opacity: 1; } to { opacity: 0; } }
+.fx-slide-left-in { transform: translateX(-22px); opacity: 0; } .fx-slide-left-in.run-in { animation: fxSlideLeftIn var(--fx-dur) var(--fx-ease) var(--fx-delay) both; }
+@keyframes fxSlideLeftIn { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
+.fx-slide-right-in { transform: translateX(22px); opacity: 0; } .fx-slide-right-in.run-in { animation: fxSlideRightIn var(--fx-dur) var(--fx-ease) var(--fx-delay) both; }
+@keyframes fxSlideRightIn { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
+.fx-zoom-in { transform: scale(.92); opacity: 0; } .fx-zoom-in.run-in { animation: fxZoomIn var(--fx-dur) var(--fx-ease) var(--fx-delay) both; }
+@keyframes fxZoomIn { from { opacity: 0; transform: scale(.92); } to { opacity: 1; transform: scale(1); } }
+/* Mobile Controls */
+#mobileNav { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(12px + env(safe-area-inset-bottom,0));
+  display: flex; gap: 10px; padding: 8px; background: color-mix(in oklab, var(--card) 88%, transparent);
+  border: 1px solid color-mix(in oklab, var(--fg) 18%, transparent); box-shadow: 0 8px 28px #00000059; border-radius: 999px; z-index: 16; }
+#mobileNav .ctl { min-width: 42px; min-height: 42px; border-radius: 999px; border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent); background: var(--card); color: var(--fg); font-size: 20px; line-height: 1; }
+#mobileNav .ctl:active { transform: translateY(1px); }
+#mobileNav .ctl[disabled] { opacity:.4; }
+@media (hover:hover) and (pointer:fine){ #mobileNav { display:none; } }
+/* === HIDE OLD NAV (PC + Mobile) === */
+#pcNav,
+#mobileNav{
+  display: none !important;
+}
+
+/* ===== FULLSCREEN + SCROLL ===== */
+html, body { height: 100%; }
+body { overflow: hidden; }
+#deck{
+  position: fixed; inset: 0;
+  overflow: auto;
+  padding: 0;
+  outline: none;
+}
+.slide{
+  max-width: none;
+  width: 100%;
+  min-height: 100vh;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent;
+  margin: 0;
+  padding: clamp(18px, 3vw, 48px);
+}
+#toolbar{ position: fixed; top:0; left:0; right:0; z-index: 30; }
+#deck{ padding-top: 56px; } /* room for toolbar */
+
+/* ===== PC NAV (RIGHT) ===== */
+#pcNav{
+  position: fixed;
+  right: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  z-index: 40;
+}
+#pcNav .ctl{
+  width: 46px; height: 46px;
+  border-radius: 999px;
+  border: 1px solid color-mix(in oklab, var(--fg) 20%, transparent);
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+  color: var(--fg);
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+#pcNav .ctl:active{ transform: translateY(1px); }
+#pcNav .ctl[disabled]{ opacity: .35; cursor: default; }
+
+/* Hide PC nav on touch-only small screens */
+@media (hover:none) and (pointer:coarse){
+  #pcNav{ display:none; }
+}
+
+/* Mobile nav: only on touch */
+@media (hover:hover) and (pointer:fine){
+  #mobileNav{ display:none !important; }
+}
+
+/* ===== INVERT MODE ===== */
+html.inverted{
+  /* DARK board mode (no filter invert) */
+  --ui-bg:#000000;
+  --ui-fg:#ffffff;
+  --svg-fg:#ffffff;
+  --svg-ac:#ffd84d;
+  --gray: var(--greyD);
+  --svg-gray:var(--gray);
+  filter: none !important;
+}
+
+html.inverted video,
+html.inverted img,
+html.inverted svg{
+  filter:none !important;
+}
+
+
+/* ================= TEACHING COLORS: NOTE / MARK ================= */
+/* Base (dark background): NOTE = yellow, MARK = gray */
+.note{ color:#ffd84d; font-weight:600; }
+.mark{ color: var(--svg-gray); font-weight:400; }
+
+/* When html is inverted (light background due to global filter),
+   cancel parent's invert for NOTE/MARK, then apply true colors. */
+html.inverted .note,
+html.inverted .mark{
+  filter:none !important;
+}
+html.inverted .note{ color:#001373; }
+html.inverted .mark{ color: var(--svg-gray); }
+
+/* ================= REMOVE TOP BAR (gamma-like) ================= */
+#toolbar{ display:none !important; }
+body{ padding-top:0 !important; }
+/* === HUD Flower (top-left, compact, safe-area) === */
+:root{
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
+}
+.hudFlower{
+  position: fixed;
+  right: calc(6px + var(--safe-left));
+  bottom:  calc(6px + var(--safe-top));
+  width:  16px;
+  height: 16px;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+.hudFlower button{
+  background: var(--svg-gray);
+  border-radius: 999px;
+    position: absolute;
+  width: 32px;
+  height: 32px;
+  font-size: 13px;
+  line-height: 16px;
+  padding: 0;
+  border: none;
+  color: var(--btn, var(--svg-gray));
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.75;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+   z-index: 2147483647;
+}
+.hudFlower button:hover{ opacity: 1; }
+html.dark .hudFlower button, body.dark .hudFlower button, html.invert .hudFlower button, html.inverted .hudFlower button{ background: #e1e1e173; box-shadow: 0 1px 2px #e1e1e173; }
+
+
+/* positions */
+/* Canh tâm – không trật khi xoay màn hình */
+.hudFlower .core{
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  
+}
+
+.hudFlower .up{
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+  display:none;
+}
+
+.hudFlower .down{
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+  display:none;
+}
+
+.hudFlower .left{
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+  display:none;
+}
+
+.hudFlower .right{
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+  display:none;
+}
+/* Hide bottom bar (we use HUD flower instead) */
+#mobileNav{ display:none !important; }
+body{ padding-bottom: 0 !important; }
+
+
+/* === PATCH v7: ensure HUD glyphs always visible === */
+
+  
+.hudFlower button{
+  background: #ffffffbf;
+  border-radius: 999px;
+  box-shadow: 0 1px 2px #00000033;
+
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  font-size: 13px;
+  line-height: 16px;
+  padding: 0;
+  border: none;
+  color: var(--btn, #111111);
+  cursor: pointer;
+  pointer-events: auto;
+  opacity: 0.75;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+
+.hudFlower button::before{
+  content:'';
+  position:absolute;
+  inset:0;
+  border-radius:50%;
+         /* dark translucent disk */
+  backdrop-filter: blur(4px);
+  
+  z-index: 2147483647;
+}
+
+
+
+/* ================= BACKGROUND LAYERS (per-slide, from MD) ================= */
+.bgLayer{
+  position:absolute; inset:0;
+  width:100%; height:100%;
+  object-fit:contain;
+  display:block;
+  pointer-events:none;
+  z-index:0;
+}
+.bgLight{ display:block; }
+.bgDark{ display:none; }
+
+/* support invert on html (and body as fallback) */
+html.inverted .bgLight, body.inverted .bgLight{ display:none; }
+html.inverted .bgDark,  body.inverted .bgDark{ display:block; }
+
+
+/* ensure slide content stays above background (robust across wrappers) */
+.slide, section.slide{ position:relative; isolation:isolate; }
+
+/* background always bottom */
+.slide > img.bgLayer{ z-index:0; }
+
+/* any content layer above (direct children + common overlay elements) */
+.slide > *:not(img.bgLayer){ position:relative; z-index:5; }
+.slide svg, .slide .ov, .slide canvas, .slide .overlay, .slide .txt{ position:relative; z-index:6; }
+
+/* if you use absolute overlay SVG, keep it above */
+.slide svg.ov, .slide .ov{ z-index:8; }
+
+
+/* ===== 2-region layout (user-specified) =====
+   In MD, wrap your slide content with:
+   <div class="S">
+     <div class="media"> ... </div>
+     <div class="content"> ... </div>
+   </div>
+   And add a slideSpec:
+   <div class="slideSpec" data-bg-light="..." data-bg-dark="..." data-top="media|content" data-ratio="60"></div>
+*/
+.slide .S, section .S, [data-slide] .S{
+  position: relative;
+  z-index: 6; /* above background */
+  width: 100%;
+  height: 100%;
+  display: grid;
+  gap: 1.2vh;
+}
+.slide .S .media, .slide .S .content,
+section .S .media, section .S .content,
+[data-slide] .S .media, [data-slide] .S .content{
+  min-height: 0;
+  overflow: auto;
+}
+
+/* Portrait: top/bottom */
+@media (orientation: portrait){
+  .slide .S, section .S, [data-slide] .S{
+    grid-template-columns: 1fr;
+    grid-template-rows: var(--major,50%) 1fr;
+  }
+}
+
+/* Landscape: left/right */
+@media (orientation: landscape){
+  .slide .S, section .S, [data-slide] .S{
+    grid-template-rows: 1fr;
+    grid-template-columns: var(--major,50%) 1fr;
+    align-items: stretch;
+  }
+}
+
+/* User-specified ordering */
+.S.top-media .media{ order: 0; }
+.S.top-media .content{ order: 1; }
+.S.top-content .content{ order: 0; }
+.S.top-content .media{ order: 1; }
+
+/* Overlay SVG color classes (recommended) */
+.ov .fg{ stroke: var(--svg-fg) !important; fill: none !important; }
+.ov .fgFill{ fill: var(--svg-fg) !important; stroke: none !important; }
+.ov .ac{ stroke: var(--svg-ac) !important; fill: none !important; }
+.ov .acFill{ fill: var(--svg-ac) !important; stroke: none !important; }
+.ov .gray{ stroke: var(--svg-gray) !important; fill: none !important; }
+.ov text, .ov .txt{ fill: var(--svg-fg) !important; }
+
+
+/* ===== PATCH v5: true theme invert (NO global filter invert) ===== */
+html.inverted{ filter: none !important; }
+html.inverted video,
+html.inverted img,
+html.inverted svg{ filter: none !important; }
+
+/* Theme colors: default = LIGHT, inverted = DARK */
+:root{
+  --bg: #ffffff !important;
+  --fg: #000000 !important;
+  --accent: #001373 !important;
+
+  /* 2 GREY tones */
+  --greyL: #666666 !important;   /* grey on WHITE */
+  --greyD: #999999 !important;   /* grey on BLACK */
+
+  /* keep backward-compat: everything uses --gray */
+  --gray: var(--greyL) !important;
+}
+
+/* Dark board mode */
+html.inverted{
+  --bg: #000000 !important;
+  --fg: #ffffff !important;
+  --accent: #ffec8c !important;
+
+  /* switch active grey */
+  --gray: var(--greyD) !important;
+}
+
+/* Overlay color vars driven by theme */
+:root{
+  --svg-fg: var(--fg) !important;
+  --svg-ac: var(--accent) !important;
+  --svg-gray: var(--gray) !important;
+}
+/* Ensure .S fills slide area so split is visible */
+.slide .S, section .S, [data-slide] .S{
+  min-height: 100% !important;
+}
+
+
+/* NOTE/MARK: use actual colors (no invert filter tricks) */
+.note{ color: var(--svg-ac) !important; }
+.mark{ color: var(--svg-gray) !important; }
+html.inverted .note, html.inverted .mark{ filter:none !important; }
+
+
+/* ===== PATCH: noteA / noteZ palettes + [[...]] shortcuts ===== */
+:root{
+  /* on WHITE background */
+  --noteA: rgb(0,19,115);
+  --noteZ: rgb(115,19,0);
+}
+html.inverted{
+  /* on BLACK background */
+  --noteA: rgb(255,236,140);
+  --noteZ: rgb(140,236,255);
+}
+
+/* legacy .note keeps working, now equals noteA */
+.note, .noteA{ color: var(--noteA) !important; font-weight: 650; }
+.noteZ{ color: var(--noteZ) !important; font-weight: 650; }
+
+/* keep mark as neutral */
+.mark{ color: var(--svg-gray) !important; font-weight: 450; }
+
+/* ===== STAGE RATIO ===== */
+
+/* Mặc định: full màn hình */
+.slide{
+  width: 100vw;
+  height: 100vh;
+}
+
+/* ===== CONTENT SAFE AREA (avoid HUD / dot-nav overlapping content) =====
+   Ý bạn: chừa khoảng trống theo HƯỚNG quay:
+   - Màn hình NGANG: hàng nút nằm bên TRÁI  -> chừa padding-left theo BỀ RỘNG hàng nút
+   - Màn hình DỌC : hàng nút nằm phía TRÊN -> chừa padding-top  theo CHIỀU CAO hàng nút
+
+   Cách làm ổn định nhất: dùng CSS variables + JS đo kích thước thật của UI (dotNav/hud)
+   rồi set biến, để “chừa đúng bằng” chiều cao/rộng của hàng nút (không cố định). */
+
+:root{
+  /* fallback (nếu JS chưa chạy) */
+  --ui-safe-top: 72px;
+  --ui-safe-left: 60px;
+  --ui-safe-right: 12px;
+  --ui-safe-bottom: 12px;
+}
+
+/* Áp dụng safe-area trực tiếp lên nội dung slide */
+.slide{
+  box-sizing: border-box;
+  padding: var(--ui-safe-top) var(--ui-safe-right) var(--ui-safe-bottom) var(--ui-safe-left);
+}
+
+/* Portrait: ưu tiên chừa phía TRÊN, còn trái để nhỏ */
+@media (orientation: portrait){
+  :root{
+    --ui-safe-left: 12px;
+  }
+}
+
+/* Landscape: ưu tiên chừa phía TRÁI, còn trên để nhỏ */
+@media (orientation: landscape){
+  :root{
+    --ui-safe-top: 12px;
+  }
+}
+/* ===== NO SCROLL + HIDE SCROLLBAR (FINAL) ===== */
+
+/* Không cho trượt */
+html, body{
+  overflow: hidden !important;
+}
+
+/* Slide và các vùng bên trong cũng không trượt */
+.slide,
+#stage,
+.cell,
+.cellA,
+.cellB{
+  overflow: hidden !important;
+}
+
+/* ===== Che scrollbar ===== */
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar{
+  width: 0 !important;
+  height: 0 !important;
+}
+
+/* Firefox */
+*{
+  scrollbar-width: none !important;
+}
+
+/* IE / Edge cũ */
+*{
+  -ms-overflow-style: none !important;
+}
+
+
+/* ===== LIST FIX (PC + MOBILE, overflow-safe) ===== */
+
+/* 1) OL: giữ kiểu đang đẹp */
+.slide ol, #deck ol{
+  list-style-position: inside !important;
+  padding-left: 1.2em !important;
+  margin: 0.4em 0;
+  list-style-type: decimal !important;
+}
+
+/* 2) UL: canh bullet lại cho bớt sâu */
+.slide ul, #deck ul{
+  list-style-position: inside !important;
+  padding-left: -0.1em !important;   /* giảm thụt */
+  margin: 0.1em 0;
+  list-style-type: disc !important;
+}
+
+/* 3) LI: giữ list-item, nhưng chỉ chỉnh “bullet” (ul) bằng indent */
+.slide li{ display: list-item !important; }
+
+.slide ul > li{
+  padding-left: 3em;    /* đẩy chữ ra khỏi bullet */
+  text-indent: -3em;    /* kéo bullet ra trái */
+}
+
+
+
+/* ===== HUD Flower – compact ellipse version ===== */
+.hudFlower{
+  position: fixed;
+  top: calc(4px + var(--safe-left));
+  left: calc(40px + var(--safe-top));
+  width: 56px;
+  height: 36px;
+  z-index: 2147483647;
+  pointer-events: none;
+}
+
+/* Nút chung */
+.hudFlower button{
+  position: absolute;
+  width: 24px;
+  height: 16px;
+  border-radius: 999px;
+  border: none;
+  pointer-events: auto;
+  cursor: pointer;
+
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffffff;
+  background: #00000073;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 1px 2px #00000059;
+}
+
+/* Nhụy hoa – invert (ít dùng) */
+.hudFlower .core{
+  width: 24px;
+  height:24px;
+  border-radius: 50%;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  opacity: 0.65;
+}
+
+/* 4 cánh */
+.hudFlower .up{
+  left: 50%;
+  top: 0;
+  transform: translateX(-50%);
+}
+
+.hudFlower .down{
+  left: 50%;
+  bottom: 0;
+  transform: translateX(-50%);
+}
+
+.hudFlower .left{
+  top: 50%;
+  left: 0;
+  transform: translateY(-50%);
+}
+
+.hudFlower .right{
+  top: 50%;
+  right: 0;
+  transform: translateY(-50%);
+}
+
+
+/* ===== HUD tweak: left/right are vertical ellipses ===== */
+.hudFlower .left,
+.hudFlower .right{
+  width: 16px !important;
+  height: 24px !important;
+  border-radius: 999px !important;
+}
+/* INLINE code (dùng để né MathJax) → hiển thị như text thường */
+:not(pre) > code{
+  background: transparent !important;
+  color: inherit !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: none !important;
+  border-radius: 0 !important;
+  font-family: inherit !important;
+  font-size: inherit !important;
+  line-height: inherit !important;
+}
+
+</style>
+<script>
+function arcFrom3Points(A,B,C){
+  const [x1,y1]=A, [x2,y2]=B, [x3,y3]=C;
+  const d = 2*(x1*(y2-y3)+x2*(y3-y1)+x3*(y1-y2));
+  if(Math.abs(d)<1e-6) return `L ${x3} ${y3}`; // gần thẳng
+
+  const ux = ((x1*x1+y1*y1)*(y2-y3)+(x2*x2+y2*y2)*(y3-y1)+(x3*x3+y3*y3)*(y1-y2))/d;
+  const uy = ((x1*x1+y1*y1)*(x3-x2)+(x2*x2+y2*y2)*(x1-x3)+(x3*x3+y3*y3)*(x2-x1))/d;
+  const r  = Math.hypot(x1-ux,y1-uy);
+  const sweep = ((x2-x1)*(y3-y1)-(y2-y1)*(x3-x1))>0 ? 1 : 0;
+  return `A ${r} ${r} 0 0 ${sweep} ${x3} ${y3}`;
+}
+
+document.querySelectorAll('[data-d]').forEach(path=>{
+  const lines = path.getAttribute('data-d').trim().split(/\n+/);
+  let out='', last=null;
+
+  lines.forEach(l=>{
+    l=l.trim();
+    if(l.startsWith('M')){
+      out+=l+'\n';
+      last=l.slice(1).trim().split(/\s+/).map(Number);
+    }
+    else if(l.startsWith('P')){
+      out+='Q'+l.slice(1)+'\n'; // P → Q
+      const n=l.slice(1).trim().split(/\s+/).map(Number);
+      last=[n[2],n[3]];
+    }
+    else if(l.startsWith('C')){
+      const n=l.slice(1).trim().split(/\s+/).map(Number);
+      out+=arcFrom3Points(last,[n[2],n[3]],[n[4],n[5]])+'\n';
+      last=[n[4],n[5]];
+    }
+    else{
+      out+=l+'\n';
+    }
+  });
+
+  path.setAttribute('d',out);
+});
+</script>
+
+<script>
+
+// Minimal helpers without regex
+function hasSuffix(str, suf){ return str.slice(-suf.length).toLowerCase() === suf.toLowerCase(); }
+function contains(str, sub){ return str.toLowerCase().indexOf(sub.toLowerCase()) !== -1; }
+</script>
+
+<!-- MathJax -->
+<script>
+window.MathJax = {
+  tex: {
+    inlineMath: [['$', '$']],
+    displayMath: [['$$', '$$']],
+    processEscapes: true,
+    tags: 'ams'
+  },
+  options: {
+    skipHtmlTags: ['script','noscript','style','textarea','pre','code']
+  },
+  startup: {
+    typeset: false
+  }
+};
+</script>
+
+
+
+<script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js"></script>
+
+<!-- Markdown-it (local) + extensions (attrs + ex) -->
+<script src="./jquery/markdown-it.min.js"></script>
+<script src="./jquery/markdown-it-attrs.js"></script>
+<script src="./jquery/markdown-it-ex.min.js"></script>
+
+<!-- DOMPurify (keep) -->
+<script src="https://cdn.jsdelivr.net/npm/dompurify@3.0.6/dist/purify.min.js"></script>
+
+<!-- Unified Markdown renderer: markdown-it (+attrs/+ex) for slides + inner blocks -->
+<script>
+(function(){
+  try{
+    if(!window.markdownit){
+      console.warn('[md] markdown-it not found');
+      return;
+    }
+    var md = window.markdownit({
+      html: true,
+      linkify: true,
+      breaks: false
+    });
+    
+
+/* === AUTO APPLY markers for ALL md.render === */
+try{
+  if(typeof window.markToSpan === 'function' && typeof md !== 'undefined' && md && typeof md.render === 'function'){
+    const __render = md.render.bind(md);
+    md.render = function(src, env){ return __render(window.markToSpan(src), env); };
+  }
+}catch(_){}
+
+if(window.markdownItAttrs) md.use(window.markdownItAttrs);
+    // markdown-it-ex naming varies by build
+    if(window.markdownitEx) md.use(window.markdownitEx);
+    else if(window.markdownItEx) md.use(window.markdownItEx);
+
+    window.__mdUnified = md;
+    window.renderMarkdownUnified = function(src){
+      try{ return window.__mdUnified.render(src || ''); }catch(_){ return ''; }
+    };
+  }catch(e){
+    console.warn('[md] init failed:', e);
+  }
+})();
+</script>
+
+<!-- (Optional) Marked kept for backwards compatibility with any legacy code paths -->
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+
+<script>
+/* === ((...)) markers: short + generic ((class:text)) === */
+window.markToSpan = function(raw){
+  if(!raw) return raw;
+
+  // Skip math segments: $...$, $$...$$ (we do NOT use \(\) or \[\] delimiters)
+  const MATH_RE = /(\$\$[\s\S]*?\$\$|\$[^\$\n]*?\$)/g;
+  const parts = String(raw).split(MATH_RE);
+
+  for(let i=0;i<parts.length;i++){
+    if(i % 2 === 1) continue;
+    parts[i] = parts[i]
+      // generic: ((class:text))
+      .replace(/\(\(\s*([a-zA-Z0-9_-]+)\s*:\s*([\s\S]*?)\s*\)\)/g,'<span class="$1">$2</span>')
+      // short-hands
+      .replace(/\(\(\?\s*([\s\S]*?)\s*\)\)/g,'<span class="noteZ">$1</span>')
+      .replace(/\(\(!\s*([\s\S]*?)\s*\)\)/g,'<span class="grey">$1</span>')
+      .replace(/\(\(\s*([\s\S]*?)\s*\)\)/g,'<span class="noteA">$1</span>');
+  }
+  return parts.join('');
+};
+</script>
+
+</head>
+<body>
+<header id="toolbar"><div class="right"><span id="counter">0 / 0</span></div></header>
+
+
+<div id="pcNav" role="toolbar" aria-label="Điều khiển (PC)">
+  <button id="btnPrevSlide" class="ctl" title="Slide trước (←)">◀</button>
+  <button id="btnNextSlide" class="ctl" title="Slide sau (→)">▶</button>
+  <button id="btnPrevItem"  class="ctl" title="Mục trước (↑)">▲</button>
+  <button id="btnNextItem"  class="ctl" title="Mục sau (↓)">▼</button>
+  <button id="btnInvert"    class="ctl" title="Invert (I)">☾</button>
+</div>
+
+<div id="progress"></div>
+<main id="deck" tabindex="0" aria-live="polite"></main>
+<div id="error" class="error">❌ Không tải được file Markdown từ tham số <code>?file=...</code>.</div>
+
+<div id="mobileNav" role="toolbar" aria-label="Điều khiển trình chiếu">
+  
+  <button id="btnInvertM" class="ctl" title="Invert (I)">☾</button>
+<button id="btnPrevItem" class="ctl" title="Mục trước (↑)" aria-label="Mục trước">▲</button>
+  <button id="btnPrevSlide" class="ctl" title="Slide trước (←)" aria-label="Slide trước">◀</button>
+  <button id="btnNextSlide" class="ctl" title="Slide sau (→)" aria-label="Slide sau">▶</button>
+  <button id="btnNextItem" class="ctl" title="Mục sau (↓)" aria-label="Mục sau">▼</button>
+</div>
+
+<script>
+(function(){
+  function $(s,root){ return (root||document).querySelector(s); }
+  function $all(s,root){ return Array.prototype.slice.call((root||document).querySelectorAll(s)); }
+  var deck=$('#deck'), progress=$('#progress'), counter=$('#counter'), errorBox=$('#error');
+  var curIndex=0, prevSlide=null;
+  var btnPrevSlide=$('#btnPrevSlide'), btnNextSlide=$('#btnNextSlide'), btnPrevItem=$('#btnPrevItem'), btnNextItem=$('#btnNextItem');
+
+  function setProgress(i,total){ var pct=Math.round(((i+1)/Math.max(1,total))*100); progress.style.width=pct+'%'; counter.textContent=(i+1)+' / '+total; }
+  function items(slide){ return $all('.inc', slide); }
+  
+
+  // --- Typewriter (safe): only for plain-text elements (no nested tags) ---
+  function __isPlainTextEl(el){
+    try{
+      for(var i=0;i<el.childNodes.length;i++){
+        var n=el.childNodes[i];
+        if(n.nodeType===1){ // element
+          if(n.tagName==='BR') continue;
+          return false;
+        }
+      }
+      return true;
+    }catch(_){ return false; }
+  }
+  function resetType(el){
+    try{
+      if(el && el.dataset && el.dataset.typeOrig!=null){
+        el.textContent = el.dataset.typeOrig;
+        delete el.dataset.typeOrig;
+        delete el.dataset.typeDone;
+      }
+      if(el) el.classList.remove('typing');
+    }catch(_){}
+  }
+  function runTypeOnce(el){
+    try{
+      if(!el || el.dataset.typeDone==='1') return;
+      if(!__isPlainTextEl(el)) return; // keep HTML intact
+      var txt = (el.textContent||'');
+      el.dataset.typeOrig = txt;
+      el.textContent = '';
+      var chars = [];
+      for(var i=0;i<txt.length;i++){
+        var sp=document.createElement('span');
+        sp.className='ch';
+        sp.textContent=txt[i];
+        el.appendChild(sp);
+        chars.push(sp);
+      }
+      var k=0;
+      el.classList.add('typing');
+      var ms = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--type-ms'))||26;
+      var timer = setInterval(function(){
+        if(k>=chars.length){
+          clearInterval(timer);
+          el.classList.remove('typing');
+          el.dataset.typeDone='1';
+          return;
+        }
+        chars[k].classList.add('show');
+        k++;
+      }, ms);
+    }catch(_){}
+  }
+function resetItems(slide){ items(slide).forEach(function(el){el.classList.remove('show'); el.classList.remove('run-in');}); }
+  function showUpto(slide,n){
+    var arr=items(slide);
+    var raf = window.requestAnimationFrame || function(fn){ return setTimeout(fn,0); };
+
+    arr.forEach(function(el,i){
+      var shouldShow = i < n;
+      var isShown = el.classList.contains('show');
+
+      if(shouldShow && !isShown){
+        el.classList.add('show');
+
+        raf(function(){
+          if(el.classList.contains('fx-fade-in')) el.classList.add('run-in');
+          if(el.classList.contains('type')) runTypeOnce(el);
+        });
+
+      }else if(!shouldShow && isShown){
+        // fade-out if available
+        if(el.classList.contains('fx-fade-out')){
+          el.classList.remove('run-in');
+          el.classList.add('run-out');
+          setTimeout(function(){
+            el.classList.remove('show');
+            el.classList.remove('run-out');
+            resetType(el);
+          }, 200);
+        }else{
+          el.classList.remove('show');
+          el.classList.remove('run-in');
+          resetType(el);
+        }
+      }
+    });
+    updateMobileControls();
+  }
+  function curShown(slide){ return items(slide).filter(function(el){return el.classList.contains('show');}).length; }
+  function nextItem(){ var s=currentSlide(); var c=items(s).length; if(c===0) return; showUpto(s, Math.min(curShown(s)+1, c)); }
+  function prevItem(){ var s=currentSlide(); var c=items(s).length; if(c===0) return; showUpto(s, Math.max(curShown(s)-1, 0)); }
+  function slides(){ return $all('.slide', deck); }
+  function currentSlide(){ return slides()[curIndex]; }
+  
+  function updateDotActive(){
+    try{
+      var dots = document.querySelectorAll('#dotNavSlides .dotBtn');
+      dots.forEach(function(d,i){
+        if(i === curIndex) d.classList.add('active');
+        else d.classList.remove('active');
+      });
+    }catch(_){}
+  }
+
+function showSlide(idx){
+    var list=slides(); if(!list.length){ errorBox.style.display='block'; setProgress(0,0); return; } else { errorBox.style.display='none'; }
+    idx=Math.max(0, Math.min(list.length-1, idx)); var next=list[idx]; curIndex=idx;
+    list.forEach(function(s,i){ s.style.display=(i===idx)?'':'none'; if(i===idx){ resetItems(s); runIn(s); } });
+    setProgress(idx, list.length); prevSlide=next;
+    updateDotActive();
+    if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([next]).catch(console.error); }
+    // Bake patterns after slide becomes visible (avoid url(#pat*) timing/scope issues)
+    try{ scheduleBakeGeo(next); }catch(_){ }
+    updateMobileControls();
+  }
+  function nextSlide(){ showSlide(curIndex+1); } function prevSlideFn(){ showSlide(curIndex-1); }
+  function runIn(root){ $all('.fx-fade-in, .fx-slide-left-in, .fx-slide-right-in, .fx-zoom-in', root).forEach(function(el){ el.classList.add('run-in'); }); }
+  function runOut(root){ /* bỏ qua hiệu ứng out để đơn giản & ổn định */ }
+
+  // Keyboard
+  document.addEventListener('keydown', function(e){
+    if(e.key==='ArrowRight'){ nextSlide(); return; }
+    if(e.key==='ArrowLeft'){ prevSlideFn(); return; }
+    if(e.key==='ArrowDown'){ nextItem(); return; }
+    if(e.key==='ArrowUp'){ prevItem(); return; }
+    if(e.key==='Home'){ showSlide(0);
+    try{ hookSplits(); }catch(_){ }
+    try{ applySvgSplits(document.getElementById('deck')||document.body); }catch(_){ }
+    try{ if(window.renderInnerMarkdownAll){ window.renderInnerMarkdownAll(); } }catch(_){ }
+    try{ if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([deck]).catch(function(){}); } }catch(_){ } return; }
+    if(e.key==='End'){ showSlide(slides().length-1); return; }
+    if(e.key==='PageUp'){ var s=currentSlide(); showUpto(s,0); return; }
+    if(e.key==='PageDown'){ var s2=currentSlide(); showUpto(s2, items(s2).length); return; }
+  });
+  btnPrevSlide.addEventListener('click', function(){ prevSlideFn(); });
+  btnNextSlide.addEventListener('click', function(){ nextSlide(); });
+  btnPrevItem.addEventListener('click', function(){ prevItem(); });
+  btnNextItem.addEventListener('click', function(){ nextItem(); });
+  
+
+// === PPT-like click: next item; if no more items => next slide; if last slide => loop to first ===
+function __shouldIgnoreClick(e){
+  try{
+    if(!e) return true;
+    // only left click / normal tap
+    if(e.type === 'click' && e.button != null && e.button !== 0) return true;
+    if(e.metaKey || e.ctrlKey || e.altKey) return true;
+
+    var t = e.target;
+    if(!t) return false;
+
+    // ignore clicks on controls / links / form / HUD
+    if(t.closest && t.closest('a,button,input,textarea,select,label,[contenteditable],.hudFlower')) return true;
+
+    // ignore while selecting text
+    var sel = window.getSelection ? window.getSelection() : null;
+    if(sel && !sel.isCollapsed) return true;
+  }catch(_){}
+  return false;
+}
+
+function __pptAdvance(){
+  var s = currentSlide();
+  if(!s) return;
+
+  var totalItems = items(s).length;
+  var shown = curShown(s);
+
+  // still have steps in current slide
+  if(totalItems > 0 && shown < totalItems){
+    nextItem();
+    return;
+  }
+
+  var totalSlides = slides().length;
+
+  // go to next slide if available
+  if(curIndex < totalSlides - 1){
+    nextSlide();
+    return;
+  }
+
+  // last slide -> loop back to first
+  showSlide(0);
+}
+
+// click/tap on deck to advance like PowerPoint
+deck.addEventListener('click', function(e){
+  if(__shouldIgnoreClick(e)) return;
+  __pptAdvance();
+}, {passive:false});
+  function updateMobileControls(){
+    var total = slides().length;
+    btnPrevSlide.disabled = (curIndex<=0);
+    btnNextSlide.disabled = (curIndex>=total-1);
+    var s=currentSlide(); var c=items(s).length; var shown=curShown(s);
+    btnPrevItem.disabled = (c===0 || shown<=0);
+    btnNextItem.disabled = (c===0 || shown>=c);
+  }
+
+  // Markdown: Marked (GFM)
+  // (Legacy) marked options - keep safe if marked exists
+  try{ if(window.marked && marked.setOptions) marked.setOptions({ gfm: true, breaks: false }); }catch(_){ }
+
+// === GEO PATTERNS: Global <defs> bank (for Slideous + DOMPurify safe) ===
+function ensureGeoPatternBank(){
+  try{
+    if(document.getElementById('geoPatternBank')) return;
+    var svg = document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.setAttribute('id','geoPatternBank');
+    svg.setAttribute('width','0');
+    svg.setAttribute('height','0');
+    svg.setAttribute('aria-hidden','true');
+    svg.style.position='absolute';
+    svg.style.left='-9999px';
+    svg.style.top='-9999px';
+    svg.style.overflow='hidden';
+    // A4 viewBox friendly (0..210, 0..297)
+    svg.innerHTML = `
+      <defs id="geoDefs">
+    <pattern id="patR" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M0.6 0.6 L 4.2 4.2"
+      stroke="var(--svg-gray)" stroke-width="0.6" fill="none"/>
+</pattern>
+  
+<pattern id="patL" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M0.6 4.2 L 4.2 0.6"
+      stroke="var(--svg-gray)" stroke-width="0.6" fill="none"/>
+</pattern>
+
+  
+
+  <pattern id="patH" patternUnits="userSpaceOnUse"
+           width="4.8" height="4.8">
+    <path d="M0 2.4 H 4.8"
+          fill="none" stroke="var(--svg-gray)" stroke-width="0.5" opacity="1"/>
+  </pattern>
+<pattern id="patV" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M2.4 0  V4.8"
+          fill="none" stroke="var(--svg-gray)" stroke-width="0.5" opacity="1"/>       
+</pattern>
+  
+ <pattern id="patD" patternUnits="userSpaceOnUse"
+           width="4.8" height="4.8">
+    <circle cx="2.4" cy="2.4" r="0.6" fill="var(--svg-gray)" opacity="1"/>
+  </pattern>
+
+  
+
+  
+</defs>
+
+    `;
+    document.body.appendChild(svg);
+  }catch(_){}
+}
+
+function applyGeoPatterns(root){
+  try{
+    ensureGeoPatternBank();
+    var bank = document.getElementById('geoPatternBank');
+    if(!bank) return;
+    var defs = bank.querySelector('defs#geoDefs');
+    if(!defs) return;
+
+    var r = root || document;
+    var svgs = r.querySelectorAll ? r.querySelectorAll('svg') : [];
+    svgs.forEach(function(s){
+      try{
+        // only inject if the svg actually uses url(#pat...)
+        var html = (s.innerHTML || '');
+        if(html.indexOf('url(#pat') === -1) return;
+
+        var has = false;
+        try{ has = !!s.querySelector('defs'); }catch(_){}
+        if(!has){
+          var d = document.createElementNS('http://www.w3.org/2000/svg','defs');
+          // clone children patterns into this defs
+          Array.prototype.slice.call(defs.children).forEach(function(ch){
+            try{ d.appendChild(ch.cloneNode(true)); }catch(_){}
+          });
+          // prepend defs as first child
+          if(s.firstChild) s.insertBefore(d, s.firstChild);
+          else s.appendChild(d);
+        }else{
+          // if defs exist but missing patterns, top-up
+          var d0 = s.querySelector('defs');
+          ['patR','patL','patX','patD','patC','patG'].forEach(function(id){
+            try{
+              if(d0.querySelector('#'+id)) return;
+              var src = defs.querySelector('#'+id);
+              if(src) d0.appendChild(src.cloneNode(true));
+            }catch(_){}
+          });
+        }
+      }catch(_){}
+    });
+  }catch(_){}
+	}
+	
+	// === GEO PATTERNS (BAKED) ===
+	// Avoid <pattern> url(#pat*) instability under Slideous/DOMPurify/timing.
+	// Convert fill="url(#patX)" -> data-pat="patX" and draw real lines/dots clipped to the shape.
+	// Supported: patR(/) patL(\\) patH(-) patV(|) patD(dot)
+	var __geoBakeUID = 0;
+	function __geoNS(tag){ return document.createElementNS('http://www.w3.org/2000/svg', tag); }
+	function __geoGetFillUrl(el){
+	  try{
+	    var f = (el.getAttribute && el.getAttribute('fill')) || '';
+	    if(/^url\(#pat[RLHVD]\)$/.test(f)) return f;
+	  }catch(_){ }
+	  try{
+	    var st = (el.getAttribute && el.getAttribute('style')) || '';
+	    var m = st.match(/fill\s*:\s*url\(#(pat[RLHVD])\)/i);
+	    if(m) return 'url(#'+m[1]+')';
+	  }catch(_){ }
+	  return '';
+	}
+	function __geoMaybeTagDataPat(el){
+	  try{
+	    if(el.getAttribute('data-pat')) return;
+	    var u = __geoGetFillUrl(el);
+	    if(!u) return;
+	    var m = u.match(/^url\(#(pat[RLHVD])\)$/);
+	    if(!m) return;
+	    el.setAttribute('data-pat', m[1]);
+	    try{ if(((el.getAttribute('fill')||'').indexOf('url(')===0)) el.setAttribute('fill','none'); }catch(_){ }
+	  }catch(_){ }
+	}
+	function bakePatternsInSVG(svg){
+	  try{
+	    if(!svg || svg.nodeType!==1) return;
+	    // Tag any url(#pat*) fill into data-pat
+	    try{ svg.querySelectorAll('[fill^="url(#pat"], [style*="url(#pat"], [data-pat]').forEach(function(el){ __geoMaybeTagDataPat(el); }); }catch(_){ }
+	    var targets = svg.querySelectorAll('[data-pat]');
+	    if(!targets.length) return;
+	    var defs = svg.querySelector('defs');
+	    if(!defs){ defs = __geoNS('defs'); svg.insertBefore(defs, svg.firstChild || null); }
+	    targets.forEach(function(el){
+	      try{
+	        if(el.getAttribute('data-pat-baked')==='1') return;
+	        var pat = (el.getAttribute('data-pat')||'').trim();
+	        if(!pat) return;
+	        var bb; try{ bb = el.getBBox(); }catch(_){ return; }
+	        if(!bb || !(bb.width>0) || !(bb.height>0)) return;
+	        var clipId = 'clip_pat_' + (++__geoBakeUID);
+	        var clip = __geoNS('clipPath');
+	        clip.setAttribute('id', clipId);
+	        var clipShape = el.cloneNode(true);
+	        clipShape.removeAttribute('data-pat');
+	        clipShape.removeAttribute('data-pat-baked');
+	        clipShape.setAttribute('fill','#000000');
+	        clipShape.setAttribute('stroke','none');
+	        clip.appendChild(clipShape);
+	        defs.appendChild(clip);
+	        var g = __geoNS('g');
+	        g.setAttribute('clip-path', 'url(#'+clipId+')');
+	        g.setAttribute('data-pat-layer', pat);
+	        var step = 6;
+	        var x0 = bb.x, y0 = bb.y, w = bb.width, h = bb.height;
+	        function addLine(x1,y1,x2,y2){
+	          var ln = __geoNS('line');
+	          ln.setAttribute('x1', x1); ln.setAttribute('y1', y1);
+	          ln.setAttribute('x2', x2); ln.setAttribute('y2', y2);
+	          ln.setAttribute('stroke', 'var(--svg-gray)');
+	          ln.setAttribute('stroke-width', '1');
+	          ln.setAttribute('fill','none');
+	          g.appendChild(ln);
+	        }
+	        if(pat==='patH'){
+	          for(var y=y0; y<=y0+h+step; y+=step){ addLine(x0, y, x0+w, y); }
+	        }else if(pat==='patV'){
+	          for(var x=x0; x<=x0+w+step; x+=step){ addLine(x, y0, x, y0+h); }
+	        }else if(pat==='patR'){
+	          for(var t=-h; t<=w+h; t+=step){ addLine(x0+t, y0+h, x0+t+h, y0); }
+	        }else if(pat==='patL'){
+	          for(var t2=-h; t2<=w+h; t2+=step){ addLine(x0+t2, y0, x0+t2+h, y0+h); }
+	        }else if(pat==='patD'){
+	          var r = 1.2;
+	          for(var yy=y0; yy<=y0+h+step; yy+=step){
+	            for(var xx=x0; xx<=x0+w+step; xx+=step){
+	              var c = __geoNS('circle');
+	              c.setAttribute('cx', xx);
+	              c.setAttribute('cy', yy);
+	              c.setAttribute('r', r);
+	              c.setAttribute('fill', 'var(--svg-gray)');
+	              g.appendChild(c);
+	            }
+	          }
+	        }else{
+	          return;
+	        }
+	        // Place baked layer after the shape
+	        if(el.parentNode) el.parentNode.insertBefore(g, el.nextSibling);
+	        el.setAttribute('data-pat-baked','1');
+	      }catch(_){ }
+	    });
+	  }catch(_){ }
+	}
+	function bakeGeoPatternsInRoot(root){
+	  try{
+	    var r = root || document;
+	    var svgs = r.querySelectorAll ? r.querySelectorAll('svg') : [];
+	    svgs.forEach(function(s){ bakePatternsInSVG(s); });
+	  }catch(_){ }
+	}
+	function scheduleBakeGeo(root){
+	  try{
+	    // double rAF to wait layout/MathJax/SVG bank render
+	    requestAnimationFrame(function(){
+	      requestAnimationFrame(function(){
+	        try{ bakeGeoPatternsInRoot(root); }catch(_){ }
+	      });
+	    });
+	  }catch(_){ }
+	}
+	
+	
+	  // === PATCH: allow inline SVG in markdown (so <svg class="ov"> in MD is not stripped) ===
+  try{
+    if(window.DOMPurify){
+      DOMPurify.setConfig({
+        USE_PROFILES: { html: true, svg: true, svgFilters: true },
+        ADD_TAGS: ['svg','g','path','line','polyline','polygon','circle','ellipse','rect','text','tspan','defs','clipPath','mask','pattern','image','marker','linearGradient','radialGradient','stop','style'],
+        ADD_ATTR: [
+          'class','id','style','transform','viewBox','preserveAspectRatio','xmlns','xmlns:xlink','xlink:href','href',
+          'stroke','stroke-width','stroke-linecap','stroke-linejoin','stroke-dasharray','stroke-dashoffset',
+          'fill','fill-rule','opacity','font-size','font-family','text-anchor','dominant-baseline',
+          'x','y','x1','y1','x2','y2','cx','cy','r','rx','ry','d','points','width','height',
+          'data-type','data-part','data-bg-light','data-bg-dark','data-top','data-ratio','data-count','data-set','data-svg',
+          'data-t-portrait','data-t-landscape','data-dx-portrait','data-dy-portrait','data-dx-landscape','data-dy-landscape'
+        ]
+      });
+      DOMPurify.addHook('uponSanitizeAttribute', function(node, data){
+        try{
+          if(data && data.attrName && data.attrName.indexOf('data-')===0) data.keepAttr = true;
+        }catch(_){}
+      });
+    }
+  }catch(_){}
+
+
+  // Preprocess: handle ::: incremental (no regex)
+  function preprocess(md){
+    var lines = md.replace(/\r\n/g,'\n').split('\n');
+    var out=[], inInc=false;
+    for (var i=0;i<lines.length;i++){
+      var ln=lines[i];
+      var t = ln.trim();
+      if (t === '::: incremental'){ inInc=true; continue; }
+      if (t === ':::'){ inInc=false; continue; }
+      if (inInc && (t.startsWith('- ') || t.startsWith('* ') || /^\d+\.\s+/.test(t))){
+        ln = ln.replace(/^\s*([-*+]\s+|\d+\.\s+)/, '$1[[INC]] ');
+      }
+      out.push(ln);
+    }
+    return out.join('\n');
+  }
+
+  // Apply { .class } (no regex)
+  function applyAttrLists(root){
+    var nodes = $all('h1,h2,h3,h4,h5,h6,p,li,blockquote,pre,table', root);
+    nodes.forEach(function(el){
+      var html = el.innerHTML, trimmed = html.trim();
+      if (trimmed.endsWith('}')){
+        var i = trimmed.lastIndexOf('{.');
+        if (i !== -1){
+          var cls = trimmed.slice(i+2, -1).trim();
+          var before = trimmed.slice(0, i).trimEnd ? trimmed.slice(0, i).trimEnd() : trimmed.slice(0, i);
+          el.className += ' ' + cls;
+          el.innerHTML = html.slice(0, html.lastIndexOf('{.')).trim();
+        }
+      }
+      if (el.tagName === 'P'){
+        var imgs = el.querySelectorAll('img');
+        if (imgs.length === 1){
+          var txt = el.innerHTML.trim();
+          if (txt.endsWith('}')){
+            var i2 = txt.lastIndexOf('{.');
+            if (i2 !== -1){
+              var cls2 = txt.slice(i2+2, -1).trim();
+              imgs[0].className += ' ' + cls2;
+              el.innerHTML = el.innerHTML.slice(0, el.innerHTML.lastIndexOf('{.')).trim();
+            }
+          }
+        }
+      }
+    // --- Teaching mode: default incremental + simple markers (.fade/.type) ---
+    nodes.forEach(function(el){
+      try{
+        var tag = (el.tagName||'').toUpperCase();
+        // default incremental for paragraphs & list items (unless explicitly disabled)
+        if((tag==='P' || tag==='LI') && !el.classList.contains('noinc')){
+          el.classList.add('inc');
+        }
+        // marker expansions (simple like note)
+        if(el.classList.contains('fade')){
+          el.classList.add('fx','fx-fade-in','fx-fade-out');
+          el.classList.add('inc');
+        }
+        if(el.classList.contains('type')){
+          el.classList.add('inc');
+        }
+      }catch(_){}
+    });
+
+    });
+    // Convert [[INC]] to .inc
+    $all('li', root).forEach(function(li){
+      var html = li.innerHTML;
+      if (html.indexOf('[[INC]] ') !== -1){
+        li.innerHTML = html.replace('[[INC]] ', '');
+        li.classList.add('inc');
+      }
+    });
+  }
+
+  // Split slides by '---' line or heading
+  function splitSlidesCompat(text){
+    var parts=[], lines=text.split('\n'), buf=[];
+    for (var i=0;i<lines.length;i++){
+      var ln=lines[i];
+      if (/^#\s+/.test(ln) && buf.length){ parts.push(buf.join('\n')); buf=[ln]; }
+      else { buf.push(ln); }
+    }
+    if(buf.length) parts.push(buf.join('\n'));
+    return parts.length?parts:[text];
+  }
+
+  // ---------- SVG FIT DIV STANDARD ----------
+  function enforceSvgFit(root){
+    try{
+      var r = root || document;
+      var svgs = r.querySelectorAll ? r.querySelectorAll('svg') : [];
+      svgs.forEach(function(svg){
+        try{
+          if(!svg.getAttribute('preserveAspectRatio')){
+            svg.setAttribute('preserveAspectRatio','xMidYMid meet');
+          }
+          // If SVG has no viewBox but has width/height, synthesize a safe viewBox
+          if(!svg.getAttribute('viewBox')){
+            var w = svg.getAttribute('width');
+            var h = svg.getAttribute('height');
+            if(w && h){
+              var ww = parseFloat(w); var hh = parseFloat(h);
+              if(isFinite(ww) && isFinite(hh) && ww>0 && hh>0){
+                svg.setAttribute('viewBox', '0 0 '+ww+' '+hh);
+              }
+            }
+          }
+        }catch(_){ }
+      });
+    }catch(_){ }
+  }
+
+
+  
+// ===== Inline SPAN + Block DIV shortcuts (minimal) =====
+// Supports:
+//   :::class ... :::         -> <div class="class">...</div>
+//   [[class: text]]          -> <span class="class">text</span>
+//   [[? text]]               -> <span class="mark">text</span>
+//   [[ text ]]               -> <span class="note">text</span>
+// Skips fenced code blocks ```...```
+function preprocessNotes(mdText){
+  mdText = String(mdText || '');
+  var parts = mdText.split(/(```[\s\S]*?```)/g);
+  for(var i=0;i<parts.length;i++){
+    var p = parts[i];
+    if(p.slice(0,3)==='```') continue;
+
+    // :::class ... :::
+    p = p.replace(/^[ \t]*:::\s*([a-zA-Z0-9_-]+)[ \t]*\n([\s\S]*?)\n[ \t]*:::[ \t]*$/gm,
+      function(_, cls, inner){
+        return '<div class="' + cls + '">\n' + inner + '\n</div>';
+      }
+    );
+
+    // [[class: text]]
+    p = p.replace(/\(\(\s*([a-zA-Z0-9_-]+)\s*:\s*([\s\S]*?)\s*\)\)/g,
+      function(_, cls, inner){
+        return '<span class="' + cls + '">' + inner + '</span>';
+      }
+    );
+
+    // [[ text ]]   -> noteA
+    // [[? text]]  -> noteZ
+    // [[! text]]  -> mark (neutral)
+    p = p.replace(/\(\(\s*([?!])?\s*([\s\S]*?)\s*\)\)/g,
+      function(_, sym, inner){
+        var cls = 'noteA';
+        if(sym === '?') cls = 'noteZ';
+        else if(sym === '!') cls = 'mark';
+        return '<span class="' + cls + '">' + inner + '</span>';
+      }
+    );
+
+    parts[i] = p;
+  }
+  return parts.join('');
+}
+
+
+function renderSlides(mdText){
+    if(mdText && mdText.charCodeAt(0)===0xFEFF) mdText=mdText.slice(1);
+    var raw = preprocess(mdText);
+    var chunks = /^\s*---\s*$/m.test(raw) ? raw.split(/^\s*---\s*$/m) : splitSlidesCompat(raw);
+    var htmlParts = chunks.map(function(chunk){
+      var html = DOMPurify.sanitize(renderMarkdownUnified(preprocessNotes(chunk)));
+      return '<section class="slide">'+html+'</section>';
+    });
+    deck.innerHTML = htmlParts.join('\n');
+    try{ applyGeoPatterns(deck); }catch(_){ }
+    $all('.slide', deck).forEach(function(s){ applyAttrLists(s); });
+    try{ enforceSvgFit(deck); }catch(_){ }
+    showSlide(0);
+    try{ hookSplits(); }catch(_){ }
+    try{ applySvgSplits(document.getElementById('deck')||document.body); }catch(_){ }
+    try{ if(window.renderInnerMarkdownAll){ window.renderInnerMarkdownAll(); } }catch(_){ }
+    try{ if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([deck]).catch(function(){}); } }catch(_){ }
+    if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([deck]).catch(console.error); }
+    try{ if(window.svgBankRerenderAll) window.svgBankRerenderAll(); }catch(_){ }
+    // After svg-bank rerender, bake patterns again (elements may appear after rerender)
+    try{ setTimeout(function(){ scheduleBakeGeo(deck); }, 30); }catch(_){ }
+  }
+
+  function fetchAndLoad(url){
+    try{
+      var resolved = new URL(url, location.href).href;
+      fetch(resolved, {cache:'no-cache'}).then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+      .then(function(t){ try{ window.__md_raw = t; }catch(_){ } errorBox.style.display='none'; renderSlides(t); try{ if(window.svgBankRerenderAll) window.svgBankRerenderAll(); }catch(_){ }
+        try{
+          // refresh backgrounds after MD -> slides render (may load before bg funcs exist)
+          (function retryBg(n){
+            try{ if(window.refreshBgAll){ window.refreshBgAll(); }
+            try{ if(window.renderInnerMarkdownAll){ window.renderInnerMarkdownAll(); } }catch(_){ }
+    try{ if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([deck]).catch(function(){}); } }catch(_){ }
+            if(window.refreshLayoutAll){ window.refreshLayoutAll(); } return; }catch(_){ }
+            if(n>0) setTimeout(function(){ retryBg(n-1); }, 30);
+          })(40);
+        }catch(_){ } })
+      .catch(function(e){ console.warn('[Load error] '+e.message); errorBox.style.display='block'; });
+    }catch(err){
+      console.warn('[Bad URL] '+err.message);
+      errorBox.style.display='block';
+    }
+  }
+
+  // Boot
+  (function(){
+    var u=new URL(location.href); var f=u.searchParams.get('file');
+    if(!f) f='lesson_sample.md';
+    fetchAndLoad(f);
+  })();
+
+  function updateMobileControls(){
+    var total = slides().length;
+    btnPrevSlide.disabled = (curIndex<=0);
+    btnNextSlide.disabled = (curIndex>=total-1);
+    var s=currentSlide(); var c=items(s).length; var shown=curShown(s);
+    btnPrevItem.disabled = (c===0 || shown<=0);
+    btnNextItem.disabled = (c===0 || shown>=c);
+  }
+})();
+</script>
+
+<script>
+(function(){
+  // Invert toggle
+  // Background refresh (lazy-load dark bg on demand)
+  function ensureBgForSlide(slide){
+    try{
+      if(!slide || slide.__bgReady) return;
+      var spec = slide.querySelector('.slideSpec') || slide.querySelector('.bgSpec');
+      if(!spec){ slide.__bgReady = true; return; }
+
+      var light = spec.getAttribute('data-bg-light') || spec.getAttribute('data-bgLight') || '';
+      var dark  = spec.getAttribute('data-bg-dark')  || spec.getAttribute('data-bgDark') || '';
+
+      // already present?
+      var imgL = slide.querySelector('img.bgLayer.bgLight');
+      var imgD = slide.querySelector('img.bgLayer.bgDark');
+
+      if(!imgL){
+        imgL = document.createElement('img');
+        imgL.className = 'bgLayer bgLight';
+        imgL.alt = '';
+        imgL.loading = 'eager';
+        imgL.decoding = 'async';
+        if(light) imgL.src = light;
+        slide.insertBefore(imgL, slide.firstChild);
+      }else{
+        if(light && imgL.getAttribute('src') !== light) imgL.src = light;
+      }
+
+      if(!imgD){
+        imgD = document.createElement('img');
+        imgD.className = 'bgLayer bgDark';
+        imgD.alt = '';
+        imgD.loading = 'eager';
+        imgD.decoding = 'async';
+        if(dark) imgD.setAttribute('data-src', dark); // lazy
+        slide.insertBefore(imgD, slide.firstChild);
+      }else{
+        if(dark) imgD.setAttribute('data-src', dark);
+      }
+
+      slide.__bgReady = true;
+    }catch(_){}
+  }
+
+  function refreshBgForSlide(slide){
+    try{
+      if(!slide) return;
+      ensureBgForSlide(slide);
+      var inv = document.documentElement.classList.contains('inverted') || document.body.classList.contains('inverted');
+      var imgD = slide.querySelector('img.bgLayer.bgDark');
+      if(inv && imgD && !imgD.getAttribute('src')){
+        var ds = imgD.getAttribute('data-src') || '';
+        if(ds) imgD.src = ds; // load dark bg when needed
+      }
+    }catch(_){}
+  }
+
+  
+  function applyLayoutForSlide(slide){
+    try{
+      if(!slide) return;
+      var spec = slide.querySelector('.slideSpec');
+      if(!spec) return;
+      var wrap = slide.querySelector('.S');
+      if(!wrap) return;
+
+      var ratio = parseInt(spec.getAttribute('data-ratio') || '60', 10);
+      if(!isFinite(ratio) || ratio<10 || ratio>90) ratio = 60;
+      slide.style.setProperty('--major', ratio + '%');
+
+      var top = (spec.getAttribute('data-top') || 'media').toLowerCase();
+      wrap.classList.toggle('top-media', top === 'media');
+      wrap.classList.toggle('top-content', top === 'content');
+    }catch(_){}
+  }
+
+  function refreshLayoutAll(){
+    try{
+      var ss = document.querySelectorAll('.slide, section, [data-slide]');
+      ss.forEach(function(sl){ applyLayoutForSlide(sl); });
+    }catch(_){}
+  }
+
+
+  
+  function renderInnerMarkdownAll(){
+    try{
+      if(!window.renderMarkdownUnified) return;
+
+      var blocks = document.querySelectorAll('.content');
+      blocks.forEach(function(el){
+        try{
+          if(!el) return;
+
+          // skip if user explicitly disables
+          if(el.getAttribute('data-md') === '0') return;
+
+          // Avoid re-render loops
+          if(el.getAttribute('data-md-rendered')==='1') return;
+
+          // Get plain text (markdown source). Using textContent works even if parser inserted <br> or wrappers.
+          var raw = (el.textContent || '').trim();
+          if(!raw) return;
+
+          // Heuristic: only render if it looks like markdown (headings, lists, bold/italic, code, links)
+          var looks = /(^|\n)\s{0,3}#{1,6}\s|(\*\*[^*]+\*\*)|(__[^_]+__)|(^|\n)\s{0,3}[-*+]\s|(^|\n)\s{0,3}\d+\.\s|`[^`]+`|\[.+\]\(.+\)/m.test(raw);
+          if(!looks) return;
+
+          // Render
+          var out = renderMarkdownUnified(raw);
+          el.innerHTML = DOMPurify.sanitize(out);
+
+          // Mark done
+          el.setAttribute('data-md-rendered','1');
+          try{ if(window.MathJax && MathJax.typesetPromise){ MathJax.typesetPromise([el]).catch(function(){}); } }catch(_){ }
+          }catch(_){}
+      });
+    }catch(_){}
+  }
+
+function refreshBgAll(){
+    try{
+      var ss = document.querySelectorAll('.slide, section, [data-slide]');
+      ss.forEach(function(sl){ refreshBgForSlide(sl); applyLayoutForSlide(sl); });
+    }catch(_){}
+  }
+  // expose for other script blocks (safe)
+  try{ window.refreshBgAll = refreshBgAll; window.refreshLayoutAll = refreshLayoutAll; window.renderInnerMarkdownAll = renderInnerMarkdownAll; window.applySvgSplits = applySvgSplits; window.applyLayoutForSlide = applyLayoutForSlide; window.refreshBgForSlide = refreshBgForSlide; window.ensureBgForSlide = ensureBgForSlide; }catch(_){ }
+
+  
+  function applySvgSplits(root){
+    // Viewport-driven Nebo-style split:
+    // - If the VIEWPORT is portrait: secondary half is BOTTOM (dy = h/2)
+    // - If the VIEWPORT is landscape: secondary half is RIGHT (dx = w/2)
+    // Author can draw everything in the primary half; anything wrapped by [data-type="splits"]
+    // will be moved into the secondary half depending on current screen orientation.
+    try{
+      var r = root || document;
+
+      // Determine current viewport orientation (mobile-safe)
+      function isViewportPortrait(){
+        try{
+          if (window.visualViewport){
+            return window.visualViewport.height >= window.visualViewport.width;
+          }
+        }catch(_){}
+        return (window.innerHeight >= window.innerWidth);
+      }
+
+      var vpPortrait = isViewportPortrait();
+
+      var svgs = (r.querySelectorAll ? r.querySelectorAll('svg.ov') : []);
+      svgs.forEach(function(svg){
+        try{
+          var vb = (svg.getAttribute('viewBox')||'').trim();
+          var p = vb.split(/[ ,]+/);
+          if(p.length<4) return;
+          var w = parseFloat(p[2]), h = parseFloat(p[3]);
+          if(!(w>0 && h>0)) return;
+
+          var dxBase = vpPortrait ? 0 : (w/2);
+          var dyBase = vpPortrait ? (h/2) : 0;
+
+          var groups = svg.querySelectorAll('[data-type="splits"]');
+          groups.forEach(function(g){
+            try{
+              // Optional overrides per orientation
+              var dxAttr = vpPortrait ? g.getAttribute('data-dx-portrait') : g.getAttribute('data-dx-landscape');
+              var dyAttr = vpPortrait ? g.getAttribute('data-dy-portrait') : g.getAttribute('data-dy-landscape');
+              var dx = (dxAttr!=null && dxAttr!=='') ? parseFloat(dxAttr) : NaN;
+              var dy = (dyAttr!=null && dyAttr!=='') ? parseFloat(dyAttr) : NaN;
+              if(!isFinite(dx)) dx = dxBase;
+              if(!isFinite(dy)) dy = dyBase;
+
+              // If author already placed the splits content into the intended half, don't auto-shift.
+              try{
+                if(g.getBBox){
+                  var bb = g.getBBox();
+                  if(vpPortrait){
+                    if(bb.y >= h*0.45) { dx = 0; dy = 0; }
+                  }else{
+                    if(bb.x >= w*0.45) { dx = 0; dy = 0; }
+                  }
+                }
+              }catch(_){}
+
+              // Preserve existing transform but remove previous auto translate marker if present.
+              var cur = (g.getAttribute('transform')||'').trim();
+              cur = cur.replace(/^translate\([^)]*\)\s*/,'').trim();
+
+              var t = '';
+              if(dx!==0 || dy!==0) t = 'translate(' + dx + ',' + dy + ')';
+              if(cur) t = t ? (t + ' ' + cur) : cur;
+
+              if(t) g.setAttribute('transform', t);
+              else g.removeAttribute('transform');
+            }catch(_){}
+          });
+        }catch(_){}
+      });
+    }catch(_){}
+  }
+
+  function hookSplits(){
+    try{
+      var deck = document.getElementById('deck') || document.body;
+      applySvgSplits(deck);
+      // Update on resize/orientation changes (debounced)
+      var tm = null;
+      function onR(){
+        try{ if(tm) clearTimeout(tm); }catch(_){}
+        tm = setTimeout(function(){ applySvgSplits(deck); }, 60);
+      }
+      window.addEventListener('resize', onR, {passive:true});
+      window.addEventListener('orientationchange', onR, {passive:true});
+    }catch(_){}
+  }
+
+function setInvert(on){
+    // Toggle theme class + persist
+    try{ document.documentElement.classList.toggle('inverted', !!on); }catch(_){}
+    try{ localStorage.setItem('slideous_invert', on?'1':'0'); }catch(_){}
+
+    // Refresh UI pieces that depend on theme
+    (function retry(n){
+      try{
+        try{ if(window.refreshBgAll) window.refreshBgAll(); }catch(_){}
+        try{ if(window.renderInnerMarkdownAll) window.renderInnerMarkdownAll(); }catch(_){}
+        try{ if(window.applySvgSplits) window.applySvgSplits(document); }catch(_){}
+        try{ if(window.refreshLayoutAll) window.refreshLayoutAll(); }catch(_){}
+        try{
+          if(window.MathJax && MathJax.typesetPromise){
+            var scope = (typeof deck!=='undefined' && deck) ? [deck] : [document.body];
+            MathJax.typesetPromise(scope).catch(function(){});
+          }
+        }catch(_){}
+        return;
+      }catch(_){}
+      if(n>0) setTimeout(function(){ retry(n-1); }, 40);
+    })(25);
+  }
+
+  function toggleInvert(){
+    var on = !document.documentElement.classList.contains('inverted');
+    setInvert(on);
+  }
+
+  // Init from saved state
+  try{
+    var saved = localStorage.getItem('slideous_invert');
+    if(saved==='1') setInvert(true);
+  }catch(_){}
+
+  // Bind invert buttons
+  var bi  = document.getElementById('btnInvert');
+  var bim = document.getElementById('btnInvertM');
+  if(bi)  bi.addEventListener('click', toggleInvert);
+  if(bim) bim.addEventListener('click', toggleInvert);
+
+  // Keyboard shortcut
+  document.addEventListener('keydown', function(e){
+    if(e.key==='i' || e.key==='I'){
+      toggleInvert();
+      e.preventDefault();
+    }
+  }, {passive:false});
+})();
+</script>
+
+
+<!-- === HUD Flower controls (top-left) === -->
+  <div class="hudFlower" id="hudFlower" aria-label="Slide controls">
+    <button class="up"    id="hudUp"    title="Prev step"></button>
+    <button class="down"  id="hudDown"  title="Next step"></button>
+    <button class="left"  id="hudLeft"  title="Prev slide"></button>
+    <button class="right" id="hudRight" title="Next slide"></button>
+    <button class="core"  id="hudCore"  title="Dark/Light"></button>
+  </div>
+
+<script>
+(function(){
+  function sendKey(key){
+    try{
+      var ev = new KeyboardEvent('keydown', {key:key, bubbles:true});
+      document.dispatchEvent(ev);
+    }catch(_){}
+  }
+  function bind(id, key){
+    var b = document.getElementById(id);
+    if(!b) return;
+    var fn = function(e){ try{ e.preventDefault(); e.stopPropagation(); }catch(_){} sendKey(key); };
+    b.addEventListener('click', fn, {passive:false});
+    // mobile: quicker response
+    b.addEventListener('touchstart', fn, {passive:false});
+  }
+  function boot(){
+    bind('hudLeft',  'ArrowLeft');
+    bind('hudRight', 'ArrowRight');
+    bind('hudUp',    'ArrowUp');
+    bind('hudDown',  'ArrowDown');
+    bind('hudCore',  'I');
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', boot);
+  }else{
+    boot();
+  }
+})();
+</script>
+<script>
+
+  // === PATCH: keep splits in sync with device rotation / viewport resize ===
+  (function(){
+    function debounce(fn, ms){
+      var t=null;
+      return function(){
+        clearTimeout(t);
+        var args=arguments;
+        t=setTimeout(function(){ fn.apply(null,args); }, ms||80);
+      };
+    }
+    function relayoutAll(){
+      try{ applySvgSplits(document); }catch(_){}
+    }
+    var relayoutDebounced = debounce(function(){
+      try{
+        requestAnimationFrame(function(){ relayoutAll(); });
+      }catch(_){
+        relayoutAll();
+      }
+    }, 100);
+
+    window.addEventListener('resize', relayoutDebounced, {passive:true});
+    window.addEventListener('orientationchange', function(){
+      setTimeout(relayoutDebounced, 180);
+    }, {passive:true});
+
+    try{
+      if(window.visualViewport){
+        window.visualViewport.addEventListener('resize', relayoutDebounced, {passive:true});
+        window.visualViewport.addEventListener('scroll', relayoutDebounced, {passive:true});
+      }
+    }catch(_){}
+
+    try{ relayoutDebounced(); }catch(_){}
+    try{
+      if(document.fonts && document.fonts.ready){
+        document.fonts.ready.then(function(){ relayoutDebounced(); });
+      }
+    }catch(_){}
+  })();
+</script>
+
+<!-- === FIT-PANE PATCH: compute pane size from viewport === -->
+<script>
+(function(){
+  function isViewportPortrait(){
+    const vv = window.visualViewport;
+    if(vv && typeof vv.width === 'number' && typeof vv.height === 'number'){
+      return vv.height >= vv.width;
+    }
+    return window.innerHeight >= window.innerWidth;
+  }
+
+  function applyFitPaneVars(){
+    const vv = window.visualViewport;
+    const W = vv ? vv.width  : window.innerWidth;
+    const H = vv ? vv.height : window.innerHeight;
+
+    const vpPortrait = isViewportPortrait();
+    // pane = min(h, w/2) landscape; min(w, h/2) portrait
+    const pane = vpPortrait ? Math.min(W, H/2) : Math.min(H, W/2);
+
+    const ovW = vpPortrait ? (pane)   : (2*pane);
+    const ovH = vpPortrait ? (2*pane) : (pane);
+
+    document.documentElement.style.setProperty('--ovW', ovW + 'px');
+    document.documentElement.style.setProperty('--ovH', ovH + 'px');
+  }
+
+  function rerun(){
+    applyFitPaneVars();
+    if(window.applyAllSvgSplit) window.applyAllSvgSplit();
+  }
+
+  window.addEventListener('resize', rerun);
+  window.addEventListener('orientationchange', rerun);
+  document.addEventListener('DOMContentLoaded', rerun);
+})();
+</script>
+<script>
+let lastTapTime = 0;
+const DOUBLE_TAP_DELAY = 300;
+
+// ---------- TOUCH (DOUBLE TAP) ----------
+document.addEventListener("touchend", (e) => {
+  const now = Date.now();
+  if (now - lastTapTime < DOUBLE_TAP_DELAY) {
+    toggleFullscreen();
+    lastTapTime = 0;
+  } else {
+    lastTapTime = now;
+  }
+}, { passive: true });
+
+// ---------- MOUSE (DOUBLE CLICK) ----------
+document.addEventListener("dblclick", (e) => {
+  toggleFullscreen();
+});
+
+// ---------- KEYBOARD (GIỮ CÁI CŨ RẤT TỐT) ----------
+document.addEventListener("keydown", (e) => {
+  if (e.shiftKey && e.code === "Space") {
+    e.preventDefault();
+    toggleFullscreen();
+  }
+});
+
+// ---------- FULLSCREEN CORE ----------
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+function enterFullscreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) elem.requestFullscreen();
+  else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+  else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+}
+</script>
+
+<script>
+/* =========================================================
+   SVGJSON BANK + Param/Surface STATIC RENDER (vNext-mini)
+   - Bank in MD fenced ```svgjson
+   - Placeholder: <svg><g data-svg="ID"></g></svg>
+   - Slot: <span class="svgSlot" data-svg="ID"></span> => auto-wrap SVG
+   ========================================================= */
+(function(){
+  "use strict";
+
+  // ---------- small helpers ----------
+  function toId(x){ return (x==null) ? "" : String(x).trim(); }
+
+  function parseViewBox(svg){
+    try{
+      const vb = (svg.getAttribute("viewBox")||"").trim().split(/[ ,]+/).map(Number);
+      if(vb.length===4 && vb.every(n=>Number.isFinite(n))) return {x:vb[0], y:vb[1], w:vb[2], h:vb[3]};
+    }catch(_){}
+    // fallback to width/height if no viewBox
+    const w = parseFloat(svg.getAttribute("width")||"0");
+    const h = parseFloat(svg.getAttribute("height")||"0");
+    if(w>0 && h>0) return {x:0,y:0,w:w,h:h};
+    return {x:0,y:0,w:240,h:160};
+  }
+
+  function mapXY(x,y, spec, vb){
+    const xmin = Number(spec.xmin), xmax = Number(spec.xmax);
+    const ymin = Number(spec.ymin), ymax = Number(spec.ymax);
+    const X = vb.x + (x - xmin) * vb.w / (xmax - xmin);
+    const Y = vb.y + vb.h - (y - ymin) * vb.h / (ymax - ymin);
+    return [X,Y];
+  }
+
+  // ---------- expression compiler (supports sin, cos, pi, etc.) ----------
+  const M = {
+    sin: Math.sin, cos: Math.cos, tan: Math.tan,
+    asin: Math.asin, acos: Math.acos, atan: Math.atan, atan2: Math.atan2,
+    sqrt: Math.sqrt, abs: Math.abs, pow: Math.pow,
+    exp: Math.exp, log: Math.log, min: Math.min, max: Math.max,
+    floor: Math.floor, ceil: Math.ceil, round: Math.round,
+    pi: Math.PI, PI: Math.PI, e: Math.E, E: Math.E
+  };
+
+  function compileExpr(expr, varNames){
+    // minimal transform: ^ -> ** for power
+    const src = String(expr||"0").replace(/\^/g,"**");
+    const args = varNames.concat(Object.keys(M));
+    const body = "return ("+src+");";
+    // eslint-disable-next-line no-new-func
+    const fn = Function.apply(null, args.concat(body));
+    return function(vars){
+      const vals = varNames.map(k => vars[k]);
+      const mvals = Object.keys(M).map(k => M[k]);
+      return fn.apply(null, vals.concat(mvals));
+    };
+  }
+
+  function asNumber(v){
+    if(typeof v === "number") return v;
+    if(typeof v === "string"){
+      const s=v.trim();
+      if(!s) return NaN;
+      // allow "2*pi" etc.
+      try{
+        const f = compileExpr(s, []);
+        const out = f({});
+        return Number(out);
+      }catch(_){}
+      const n = parseFloat(s);
+      return Number.isFinite(n)?n:NaN;
+    }
+    return NaN;
+  }
+
+  // ---------- main drawing ----------
+  // 3D-ish projection helper (a,b,c) -> (x,y)
+  // - Rotate in (a,b) plane by angle (theta)
+  // - "Compress" rotated y by m and add a z component scaled by sqrt(1-m^2)
+  // This matches the user's model:
+  //   x = a*cos(theta) - b*sin(theta)
+  //   y = m*(a*sin(theta) + b*cos(theta)) + sqrt(1-m^2)*c
+  function projectABC(a,b,c, theta, m){
+    const A = Number(a), B = Number(b), C = Number(c);
+    const th = Number.isFinite(theta) ? Number(theta) : 0;
+    const mm = Number.isFinite(m) ? Number(m) : 1;
+    const k = Math.sqrt(Math.max(0, 1 - mm*mm));
+    const cs = Math.cos(th), sn = Math.sin(th);
+    const X = A*cs - B*sn;
+    const Y = mm*(A*sn + B*cs) + k*C;
+    return [X,Y];
+  }
+
+  // Build an evaluator that supports per-spec vars.
+  // spec.vars can contain numbers OR expression strings that may depend on (t) or (u,v).
+  function buildEvaluator(spec, baseVarNames){
+    const defs = (spec && typeof spec.vars === 'object' && spec.vars) ? spec.vars : {};
+    const varKeys = Object.keys(defs);
+    const allNames = baseVarNames.concat(varKeys);
+    const cache = Object.create(null);
+
+    function getCompiled(key, expr){
+      if(cache[key]) return cache[key];
+      cache[key] = compileExpr(expr, allNames);
+      return cache[key];
+    }
+
+    function evalWith(ctxBase, expr){
+      const ctx = Object.assign({}, ctxBase);
+      // Evaluate vars into ctx (numbers or expressions).
+      for(let i=0;i<varKeys.length;i++){
+        const k = varKeys[i];
+        const v = defs[k];
+        if(typeof v === 'number'){
+          ctx[k] = v;
+        }else if(typeof v === 'string'){
+          try{
+            const f = getCompiled('var:'+k, v);
+            ctx[k] = Number(f(ctx));
+          }catch(_){
+            ctx[k] = NaN;
+          }
+        }else{
+          ctx[k] = NaN;
+        }
+      }
+      try{
+        const f = getCompiled('expr:'+expr, expr);
+        return Number(f(ctx));
+      }catch(_){
+        return NaN;
+      }
+    }
+
+    return { evalWith, varKeys };
+  }
+
+  function makeParamPath(spec, svg){
+    const vb = parseViewBox(svg);
+    const tmin = asNumber(spec.tmin ?? 0);
+    const tmax = asNumber(spec.tmax ?? (2*Math.PI));
+    const step = asNumber(spec.step ?? 0.05);
+    const close = !!spec.close;
+
+    const hasZ = (spec && (spec.zExpr != null || spec.cExpr != null));
+    // If zExpr exists, treat xExpr/yExpr/zExpr as (a,b,c) then project to 2D.
+    const XEX = String((spec && spec.xExpr!=null) ? spec.xExpr : (hasZ ? "0" : "t"));
+    const YEX = String((spec && spec.yExpr!=null) ? spec.yExpr : "0");
+    const ZEX = String((spec && (spec.zExpr!=null ? spec.zExpr : spec.cExpr)) ?? "0");
+
+    const ev = buildEvaluator(spec, ["t"]);
+
+    const pts = [];
+    if(!(step>0) || !(tmax>=tmin)) return "";
+    for(let t=tmin; t<=tmax+1e-12; t+=step){
+      let x,y;
+      if(hasZ){
+        const a = ev.evalWith({t}, XEX);
+        const b = ev.evalWith({t}, YEX);
+        const c = ev.evalWith({t}, ZEX);
+        // theta can be provided as spec.theta/spec.s or via vars (theta/s)
+        const theta = (spec && (spec.theta ?? spec.s));
+        const m0 = (spec && spec.m);
+        // Prefer per-point vars if present
+        const thv = ev.evalWith({t}, String(theta ?? "s"));
+        const mv  = ev.evalWith({t}, String(m0 ?? "m"));
+        const P = projectABC(a,b,c, thv, mv);
+        x = P[0]; y = P[1];
+      }else{
+        x = ev.evalWith({t}, XEX);
+        y = ev.evalWith({t}, YEX);
+      }
+      if(!Number.isFinite(x) || !Number.isFinite(y)) continue;
+      pts.push(mapXY(x,y,spec,vb));
+    }
+    if(pts.length<2) return "";
+
+    let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+    for(let i=1;i<pts.length;i++){
+      d += ` L ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)}`;
+    }
+    if(close) d += " Z";
+
+    const stroke = spec.stroke ?? "var(--svg-fg)";
+    const sw = spec.strokeWidth ?? 2;
+    const fill = (spec.fill!=null) ? spec.fill : "none";
+    const op = (spec.opacity!=null) ? spec.opacity : 1;
+
+    return `<path d="${d}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}" opacity="${op}" stroke-linecap="round" stroke-linejoin="round"/>`;
+  }
+
+  function makeSurfaceLines(spec, svg){
+    const vb = parseViewBox(svg);
+
+    const umin = asNumber(spec.umin ?? 0);
+    const umax = asNumber(spec.umax ?? (2*Math.PI));
+    const vmin = asNumber(spec.vmin ?? 0);
+    const vmax = asNumber(spec.vmax ?? (2*Math.PI));
+
+    // Prefer du/dv (SGK-style). Fallback to nu/nv if du/dv missing.
+    const duIn = (spec.du!=null) ? asNumber(spec.du) : NaN;
+    const dvIn = (spec.dv!=null) ? asNumber(spec.dv) : NaN;
+
+    const nu =  parseInt(spec.nu ?? 6, 10);
+    const nv =  parseInt(spec.nv ?? 6, 10);
+
+    const du = (Number.isFinite(duIn) && duIn>0) ? duIn : Math.abs(umax-umin)/Math.max(1,(nu-1));
+    const dv = (Number.isFinite(dvIn) && dvIn>0) ? dvIn : Math.abs(vmax-vmin)/Math.max(1,(nv-1));
+
+    // fine sampling along each grid-line to get smooth hidden/visible split
+    let ptsStep = (spec.gridPtsStep!=null) ? asNumber(spec.gridPtsStep) : NaN;
+    if(!(Number.isFinite(ptsStep) && ptsStep>0)){
+      const base = Math.min(du, dv);
+      ptsStep = (Number.isFinite(base) && base>0) ? Math.max(1e-6, base/3) : 0.02;
+    }
+
+    const hasZ = (spec && (spec.zExpr != null || spec.cExpr != null));
+    const XEX = String((spec && spec.xExpr!=null) ? spec.xExpr : "u");
+    const YEX = String((spec && spec.yExpr!=null) ? spec.yExpr : "v");
+    const ZEX = String((spec && (spec.zExpr!=null ? spec.zExpr : spec.cExpr)) ?? "0");
+    const ev = buildEvaluator(spec, ["u","v"]);
+
+    const stroke = spec.stroke ?? "var(--svg-fg)";
+    const sw = spec.strokeWidth ?? 1.2;
+    const op = (spec.opacity!=null) ? spec.opacity : 0.9;
+
+    const showHidden = (spec.showHidden!=null) ? !!spec.showHidden : true;
+    const hiddenDash = String(spec.hiddenDash ?? "4 4");
+
+    // helper: build list of parameter values (inclusive)
+    function rangeVals(a,b,step){
+      const out=[];
+      const dir = (b>=a) ? 1 : -1;
+      const st = Math.abs(step) * dir;
+      if(!Number.isFinite(st) || st===0) return [a,b];
+      for(let t=a; dir>0 ? (t<=b+1e-12) : (t>=b-1e-12); t+=st){
+        out.push(t);
+        if(out.length>20000) break;
+      }
+      if(out.length && Math.abs(out[out.length-1]-b)>1e-9) out.push(b);
+      if(!out.length) out.push(a,b);
+      return out;
+    }
+
+    // Evaluate 3D position at (u,v)
+    function pos3(u,v){
+      const a = ev.evalWith({u,v}, XEX);
+      const b = ev.evalWith({u,v}, YEX);
+      const c = hasZ ? ev.evalWith({u,v}, ZEX) : 0;
+      if(!Number.isFinite(a) || !Number.isFinite(b) || !Number.isFinite(c)) return null;
+      return {x:+a, y:+b, z:+c};
+    }
+
+    // Normal via finite differences (central)
+    const uSpan = Math.max(1e-6, Math.abs(umax-umin));
+    const vSpan = Math.max(1e-6, Math.abs(vmax-vmin));
+    const epsU = Math.max(1e-6, uSpan*1e-4);
+    const epsV = Math.max(1e-6, vSpan*1e-4);
+    function sub(A,B){ return {x:A.x-B.x, y:A.y-B.y, z:A.z-B.z}; }
+    function cross(a,b){ return {x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z, z:a.x*b.y-a.y*b.x}; }
+    function clamp(x,a,b){ return (x<a)?a : (x>b)?b : x; }
+
+    // === AUTO EDGE PAD (avoid unstable normals right on boundary) ===
+    const uSpanAbs = Math.abs(umax-umin);
+    const vSpanAbs = Math.abs(vmax-vmin);
+    const edgePad = (spec.edgePad != null) ? asNumber(spec.edgePad) : NaN;
+    let edgePadU = (spec.edgePadU != null) ? asNumber(spec.edgePadU) : NaN;
+    let edgePadV = (spec.edgePadV != null) ? asNumber(spec.edgePadV) : NaN;
+
+    // Default: 0.002 * span  (so u:[0,1] => 0.002)
+    if(!Number.isFinite(edgePadU)) edgePadU = Number.isFinite(edgePad) ? edgePad : (uSpanAbs>0 ? 0.002*uSpanAbs : 0);
+    if(!Number.isFinite(edgePadV)) edgePadV = Number.isFinite(edgePad) ? edgePad : (vSpanAbs>0 ? 0.002*vSpanAbs : 0);
+
+    // Cap: never eat more than 45% of span
+    edgePadU = Math.min(Math.max(0, edgePadU), 0.45*uSpanAbs);
+    edgePadV = Math.min(Math.max(0, edgePadV), 0.45*vSpanAbs);
+
+    const uSafeMin = umin + edgePadU;
+    const uSafeMax = umax - edgePadU;
+    const vSafeMin = vmin + edgePadV;
+    const vSafeMax = vmax - edgePadV;
+
+    function normal(u,v){
+      // Keep the *point* at (u,v), but compute normal slightly inside for stability.
+      const un = clamp(u, uSafeMin, uSafeMax);
+      const vn = clamp(v, vSafeMin, vSafeMax);
+
+      // one-sided differences near boundary, centered inside
+      let u0 = un - epsU, u1 = un + epsU;
+      let v0 = vn - epsV, v1 = vn + epsV;
+
+      const UMIN = umin, UMAX = umax, VMIN = vmin, VMAX = vmax;
+
+      // u: clamp and choose one-sided if needed
+      if(u0 < UMIN){ u0 = un; u1 = Math.min(un + epsU, UMAX); }
+      else if(u1 > UMAX){ u0 = Math.max(un - epsU, UMIN); u1 = un; }
+
+      // v
+      if(v0 < VMIN){ v0 = vn; v1 = Math.min(vn + epsV, VMAX); }
+      else if(v1 > VMAX){ v0 = Math.max(vn - epsV, VMIN); v1 = vn; }
+
+      const pu1=pos3(u1, vn), pu0=pos3(u0, vn);
+      const pv1=pos3(un, v1), pv0=pos3(un, v0);
+      if(!pu1||!pu0||!pv1||!pv0) return null;
+      return cross(sub(pu1,pu0), sub(pv1,pv0));
+    }
+// View direction (world) consistent with projectABC
+    function viewDir(theta,m){
+      const th = Number.isFinite(theta) ? Number(theta) : 0;
+      const mm = Number.isFinite(m) ? Number(m) : 1;
+      const k = Math.sqrt(Math.max(0, 1 - mm*mm));
+      return {x: -k*Math.sin(th), y: -k*Math.cos(th), z: mm};
+    }
+
+    function projectXY(P, thv, mv){
+      const P2 = projectABC(P.x, P.y, P.z, thv, mv);
+      return mapXY(P2[0], P2[1], spec, vb);
+    }
+
+    function buildD(pts){
+      if(pts.length<2) return "";
+      let d = `M ${pts[0][0].toFixed(2)} ${pts[0][1].toFixed(2)}`;
+      for(let i=1;i<pts.length;i++){
+        d += ` L ${pts[i][0].toFixed(2)} ${pts[i][1].toFixed(2)}`;
+      }
+      return d;
+    }
+
+    function mkPath(d, dashed){
+      if(!d) return "";
+      return `<path d="${d}" fill="none" stroke="${stroke}" stroke-width="${sw}" opacity="${op}" stroke-linecap="round" stroke-linejoin="round"${dashed?` stroke-dasharray="${hiddenDash}"`:``}/>`;
+    }
+
+    // Split a polyline by visibility sign changes
+    function splitCurve(tVals, getUV){
+      const vis=[], hid=[];
+      let seg=[], segVis=null;
+      let prev=null, prevS=null;
+
+      function flush(){
+        const d = buildD(seg);
+        if(d){
+          (segVis ? vis : hid).push(d);
+        }
+        seg=[];
+      }
+
+      for(let i=0;i<tVals.length;i++){
+        const t=tVals[i];
+        const uv=getUV(t);
+        const P=pos3(uv.u, uv.v);
+        if(!P){ flush(); prev=null; prevS=null; segVis=null; continue; }
+
+        const theta = (spec && (spec.theta ?? spec.s));
+        const m0    = (spec && spec.m);
+        const thv = ev.evalWith({u:uv.u, v:uv.v}, String(theta ?? "s"));
+        const mv  = ev.evalWith({u:uv.u, v:uv.v}, String(m0 ?? "m"));
+
+        const N=normal(uv.u, uv.v);
+        if(!N){ flush(); prev=null; prevS=null; segVis=null; continue; }
+
+        const V=viewDir(thv, mv);
+        const sgn = N.x*V.x + N.y*V.y + N.z*V.z;
+        const isVis = (sgn < 0);
+
+        const XY = projectXY(P, thv, mv);
+        if(!Number.isFinite(XY[0]) || !Number.isFinite(XY[1])){ flush(); prev=null; prevS=null; segVis=null; continue; }
+
+        if(prev===null){
+          segVis=isVis;
+          seg.push([XY[0],XY[1]]);
+          prev=P; prevS=sgn;
+          continue;
+        }
+
+        const s0=prevS, s1=sgn;
+        const change = (s0===0) ? true : (s0*s1<0);
+
+        if(change){
+          const tFrac = (s0===s1) ? 0.5 : (s0/(s0-s1));
+          const Pb={x: prev.x+(P.x-prev.x)*tFrac,
+                    y: prev.y+(P.y-prev.y)*tFrac,
+                    z: prev.z+(P.z-prev.z)*tFrac};
+          const XYb = projectXY(Pb, thv, mv);
+
+          seg.push([XYb[0],XYb[1]]);
+          flush();
+
+          segVis=isVis;
+          seg.push([XYb[0],XYb[1]]);
+          seg.push([XY[0],XY[1]]);
+        }else{
+          if(segVis!==isVis){ flush(); segVis=isVis; }
+          seg.push([XY[0],XY[1]]);
+        }
+
+        prev=P; prevS=sgn;
+      }
+      flush();
+      return {vis,hid};
+    }
+
+    // If no z, draw simple grid (no hidden lines concept)
+    if(!hasZ){
+      const out=[];
+      const uVals = rangeVals(umin, umax, du);
+      const vVals = rangeVals(vmin, vmax, dv);
+
+      function linePathU(u){
+        let pts=[];
+        const vFine = rangeVals(vmin, vmax, ptsStep);
+        for(const v of vFine){
+          const x = ev.evalWith({u,v}, XEX);
+          const y = ev.evalWith({u,v}, YEX);
+          if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
+          const [X,Y]=mapXY(x,y,spec,vb);
+          pts.push([X,Y]);
+        }
+        const d=buildD(pts);
+        if(d) out.push(mkPath(d,false));
+      }
+      function linePathV(v){
+        let pts=[];
+        const uFine = rangeVals(umin, umax, ptsStep);
+        for(const u of uFine){
+          const x = ev.evalWith({u,v}, XEX);
+          const y = ev.evalWith({u,v}, YEX);
+          if(!Number.isFinite(x)||!Number.isFinite(y)) continue;
+          const [X,Y]=mapXY(x,y,spec,vb);
+          pts.push([X,Y]);
+        }
+        const d=buildD(pts);
+        if(d) out.push(mkPath(d,false));
+      }
+
+      uVals.forEach(linePathU);
+      vVals.forEach(linePathV);
+      return `<g>${out.join("")}</g>`;
+    }
+
+    // 3D surface: draw grid with hidden/visible split
+    const outVis=[], outHid=[];
+    const uVals = rangeVals(umin, umax, du);
+    const vVals = rangeVals(vmin, vmax, dv);
+    const uFine = rangeVals(umin, umax, ptsStep);
+    const vFine = rangeVals(vmin, vmax, ptsStep);
+
+    for(const u of uVals){
+      const r=splitCurve(vFine, (t)=>({u, v:t}));
+      outVis.push(...r.vis); outHid.push(...r.hid);
+    }
+    for(const v of vVals){
+      const r=splitCurve(uFine, (t)=>({u:t, v}));
+      outVis.push(...r.vis); outHid.push(...r.hid);
+    }
+
+    // Hidden first, then visible on top
+    const parts=[];
+    if(showHidden) outHid.forEach(d=>parts.push(mkPath(d,true)));
+    outVis.forEach(d=>parts.push(mkPath(d,false)));
+    return `<g>${parts.join("")}</g>`;
+  }
+
+  // ---------- bank collect from RAW markdown ----------
+  function collectSvgBankFromMarkdown(mdText){
+    const bank = Object.create(null);
+    if(!mdText) return bank;
+
+    const re = /```\s*svgjson\s*\n([\s\S]*?)\n```/gi;
+    let m;
+    while((m = re.exec(mdText)) !== null){
+      const raw = (m[1]||"").trim();
+      if(!raw) continue;
+      try{
+        const obj = JSON.parse(raw);
+        const arr = Array.isArray(obj) ? obj : [obj];
+        arr.forEach(sp=>{
+          const id = toId(sp && sp.id);
+          if(id) bank[id] = sp;
+        });
+      }catch(e){
+        console.warn("[svgjson] JSON parse fail:", e);
+      }
+    }
+    return bank;
+  }
+
+  // ---------- render placeholders ----------
+  function ensureSlotSvg(span){
+    // create <svg><g data-svg="..."></g></svg> inside span
+    try{
+      if(!span || span.__slotReady) return;
+      const id = span.getAttribute("data-svg");
+      if(!id) return;
+
+      const w = span.style.width || span.getAttribute("data-w") || "240px";
+      const h = span.style.height || span.getAttribute("data-h") || "160px";
+
+      const svgNS = "http://www.w3.org/2000/svg";
+      const svg = document.createElementNS(svgNS, "svg");
+      svg.setAttribute("class", "ov");
+      svg.setAttribute("xmlns", svgNS);
+      svg.setAttribute("viewBox", "0 0 240 160");
+      svg.setAttribute("preserveAspectRatio", "xMidYMid meet");
+      svg.style.width = w;
+      svg.style.height = h;
+
+      const g = document.createElementNS(svgNS, "g");
+      g.setAttribute("data-svg", id);
+
+      svg.appendChild(g);
+      span.innerHTML = "";
+      span.appendChild(svg);
+      span.__slotReady = true;
+    }catch(_){}
+  }
+
+  function renderSvgPlaceholders(root){
+    const r = root || document;
+    // span slots
+    const spans = r.querySelectorAll ? r.querySelectorAll("span.svgSlot[data-svg]") : [];
+    spans.forEach(ensureSlotSvg);
+
+    const gs = r.querySelectorAll ? r.querySelectorAll("g[data-svg]") : [];
+    gs.forEach(g=>{
+      const id = toId(g.getAttribute("data-svg"));
+      if(!id) return;
+      const spec = (window.__svgBank && window.__svgBank[id]) ? window.__svgBank[id] : null;
+      if(!spec) return;
+
+      // avoid rerender if already rendered for same spec hash-ish
+      const sig = JSON.stringify(spec);
+      if(g.__sig === sig) return;
+
+      const svg = g.ownerSVGElement;
+      if(!svg) return;
+
+      let inner = "";
+      const type = (spec.type||"").toLowerCase();
+      if(type==="param") inner = makeParamPath(spec, svg);
+      else if(type==="surface") inner = makeSurfaceLines(spec, svg);
+      else return;
+
+      try{ g.innerHTML = inner; g.__sig = sig; }catch(_){}
+    });
+  }
+
+  function hideSvgjsonBlocks(root){
+    // hide visible code block if you didn't wrap it in .bankOnly
+    try{
+      const r = root || document;
+      const codes = r.querySelectorAll('pre > code.language-svgjson, pre > code.svgjson');
+      codes.forEach(code=>{
+        const pre = code.closest('pre');
+        if(pre) pre.style.display = 'none';
+      });
+    }catch(_){}
+  }
+
+  function rerenderAll(){
+    try{
+      window.__svgBank = collectSvgBankFromMarkdown(window.__md_raw || "");
+    }catch(_){
+      window.__svgBank = Object.create(null);
+    }
+    try{ hideSvgjsonBlocks(document); }catch(_){}
+    try{ renderSvgPlaceholders(document.getElementById("deck") || document.body); }catch(_){}
+  }
+
+  // expose
+  window.svgBankRerenderAll = rerenderAll;
+  window.makeParamPath = makeParamPath;
+  window.makeSurfaceLines = makeSurfaceLines;
+
+  // keep alive on layout changes
+  function debounce(fn,ms){
+    let t=null;
+    return function(){
+      clearTimeout(t);
+      const args=arguments;
+      t=setTimeout(()=>fn.apply(null,args), ms||80);
+    };
+  }
+  const rerun = debounce(()=>{ try{ rerenderAll(); }catch(_){} }, 120);
+
+  window.addEventListener("resize", rerun, {passive:true});
+  window.addEventListener("orientationchange", rerun, {passive:true});
+
+  // MutationObserver: when slides re-render
+  try{
+    const deck = document.getElementById("deck");
+    if(deck){
+      const mo = new MutationObserver(rerun);
+      mo.observe(deck, {subtree:true, childList:true});
+    }
+  }catch(_){}
+
+})();
+</script>
+
+
+<!-- === DOT NAV (slides + items) === -->
+<div id="dotNavSlides" aria-label="Chuyển slide"></div>
+
+<script>
+/* === DOT NAV (slides only, robust) === */
+(function(){
+  function ensure(){
+    let box = document.getElementById('dotNavSlides');
+    if(!box){
+      box = document.createElement('div');
+      box.id = 'dotNavSlides';
+      box.setAttribute('aria-label','Chuyển slide');
+      document.body.appendChild(box);
+    }
+    return box;
+  }
+
+  function clear(el){ while(el && el.firstChild) el.removeChild(el.firstChild); }
+
+  function makeDot(onClick){
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'dotBtn';
+    b.addEventListener('click', function(e){ e.preventDefault(); onClick(); }, {passive:false});
+    b.addEventListener('touchstart', function(e){ e.preventDefault(); onClick(); }, {passive:false});
+    return b;
+  }
+
+  function getSlideEls(){
+    // Prefer deck-scoped slides (your engine uses #deck)
+    const deck = document.getElementById('deck');
+    if(deck){
+      const arr = deck.querySelectorAll('.slide');
+      if(arr && arr.length) return Array.from(arr);
+    }
+    return Array.from(document.querySelectorAll('.slide'));
+  }
+
+  function getCurIndex(slides){
+    // Prefer engine variable if exists
+    if(typeof curIndex !== 'undefined') return curIndex;
+    // fallback: find visible slide
+    for(let i=0;i<slides.length;i++){
+      const s = slides[i];
+      const ds = (s.style && s.style.display) || '';
+      if(ds !== 'none') return i;
+    }
+    return 0;
+  }
+
+  function goSlide(i){
+  // Robust: step through existing ArrowLeft/ArrowRight handler to reach target index.
+  // This avoids relying on showSlide being global (it may be scoped inside your slide engine).
+  try{
+    const sl = getSlideEls();
+    const cur = getCurIndex(sl);
+    const delta = i - cur;
+    if(delta === 0) { setTimeout(setActive, 0); return; }
+
+    const key = (delta > 0) ? 'ArrowRight' : 'ArrowLeft';
+    const steps = Math.min(400, Math.abs(delta)); // safety cap
+    for(let k=0;k<steps;k++){
+      const ev = new KeyboardEvent('keydown', {key, bubbles:true, cancelable:true});
+      document.dispatchEvent(ev);
+    }
+    setTimeout(function(){ setActive(); }, 0);
+  }catch(_){}
+}
+
+  function rebuild(){
+    const box = ensure();
+    const sl = getSlideEls();
+    const n = sl.length;
+
+    clear(box);
+    for(let i=0;i<n;i++){
+      box.appendChild(makeDot(()=>goSlide(i)));
+    }
+    setActive();
+  }
+
+  function setActive(){
+    const box = ensure();
+    const sl = getSlideEls();
+    const idx = getCurIndex(sl);
+    const dots = box.querySelectorAll('.dotBtn');
+    dots.forEach((d,i)=>d.classList.toggle('active', i===idx));
+  }
+
+  // Wrap showSlide to update active
+  function hook(){
+    try{
+      if(typeof showSlide === 'function' && !showSlide.__dotNavWrapped){
+        const _showSlide = showSlide;
+        showSlide = function(i){
+          const r = _showSlide(i);
+          setTimeout(function(){ rebuild(); }, 0);
+          return r;
+        };
+        showSlide.__dotNavWrapped = true;
+      }
+    }catch(_){}
+  }
+
+  // Keep containers alive (some code replaces DOM)
+  try{
+    const mo = new MutationObserver(()=>{ ensure(); });
+    mo.observe(document.documentElement, {childList:true, subtree:true});
+  }catch(_){}
+
+  // Init & retry until deck built
+  let tries = 0;
+  const t = setInterval(function(){
+    tries++;
+    ensure();
+    hook();
+    const n = getSlideEls().length;
+    if(n > 1 || tries > 120){
+      rebuild();
+      clearInterval(t);
+      return;
+    }
+  }, 50);
+
+  // Also rebuild on load/orientation changes
+  window.addEventListener('load', ()=>setTimeout(rebuild, 0));
+  window.addEventListener('resize', ()=>setTimeout(setActive, 50));
+})();
+</script>
+
+<script>
+/* Auto measure UI bars to set safe paddings (top/left) */
+(function(){
+  const ROOT = document.documentElement;
+
+  function setVar(name, px){
+    if (!Number.isFinite(px)) return;
+    ROOT.style.setProperty(name, Math.max(0, Math.round(px)) + "px");
+  }
+
+  function measure(){
+    const dot = document.getElementById("dotNavSlides");
+    const hud = document.getElementById("hudFlower");
+    const els = [dot, hud].filter(Boolean);
+
+    let topGap = 12, leftGap = 12, rightGap = 12, bottomGap = 12;
+    const margin = 10;
+
+    const W = window.innerWidth || 0;
+    const H = window.innerHeight || 0;
+
+    for (const el of els){
+      const r = el.getBoundingClientRect();
+
+      // If UI touches TOP edge => reserve height
+      const EDGE = 24;
+      const touchesTop = r.top <= EDGE;
+      const looksTopBar = r.width >= r.height * 2;
+
+      // If UI touches LEFT edge => reserve width
+      const touchesLeft = r.left <= EDGE;
+      const looksLeftBar = r.height >= r.width * 2;
+
+      // Also consider any corner widgets
+      if (touchesTop){
+        topGap = Math.max(topGap, r.bottom + margin);
+      }
+      if (touchesLeft){
+        leftGap = Math.max(leftGap, r.right + margin);
+      }
+
+      // If something is pinned to bottom/right, keep small reserves (optional)
+      if (r.bottom >= H - 2) bottomGap = Math.max(bottomGap, (H - r.top) + margin);
+      if (r.right  >= W - 2) rightGap  = Math.max(rightGap, (W - r.left) + margin);
+    }
+
+    // NOTE: không ép theo orientation; chừa theo vị trí thật của UI (trên/trái)
+
+    setVar("--ui-safe-top", topGap);
+    setVar("--ui-safe-left", leftGap);
+    setVar("--ui-safe-right", rightGap);
+    setVar("--ui-safe-bottom", bottomGap);
+  }
+
+  function scheduleMeasure(){
+    // run a few times because fonts/layout may settle after load/slide change
+    measure();
+    requestAnimationFrame(measure);
+    setTimeout(measure, 80);
+    setTimeout(measure, 250);
+  }
+
+  window.addEventListener("resize", scheduleMeasure, {passive:true});
+  window.addEventListener("orientationchange", scheduleMeasure, {passive:true});
+  document.addEventListener("DOMContentLoaded", scheduleMeasure);
+
+  // If slideous swaps slides / updates layout, try hook common events:
+  window.addEventListener("hashchange", scheduleMeasure, {passive:true});
+})();
+</script>
+</body>
+</html>

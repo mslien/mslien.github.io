@@ -1,0 +1,4126 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0, user-scalable=no, minimal-ui" name="viewport"/>
+<script>
+window.markToSpan = function(raw){
+  if(!raw) return raw;
+
+  // Skip math segments: $...$, $$...$$  (we disabled \(\) and \[\] delimiters in this build)
+  const MATH_RE = /(\$\$[\s\S]*?\$\$|\$[^\$\n]*?\$)/g;
+  const parts = String(raw).split(MATH_RE);
+
+  for(let i=0;i<parts.length;i++){
+    if(i % 2 === 1) continue; // math segment
+    parts[i] = parts[i]
+     .replace(
+  /\(\(\s*([a-zA-Z0-9_-]+)\s*:\s*([\s\S]*?)\s*\)\)/g,
+  '<span class="$1">$2</span>'
+)
+      // ((? ...)) -> noteZ
+      .replace(/\(\(\?\s*([\s\S]*?)\s*\)\)/g, '<span class="noteZ">$1</span>')
+      // ((! ...)) -> grey
+      .replace(/\(\(!\s*([\s\S]*?)\s*\)\)/g, '<span class="grey">$1</span>')
+      // (( ...))  -> noteA
+      .replace(/\(\(\s*([\s\S]*?)\s*\)\)/g,  '<span class="noteA">$1</span>');
+  }
+  return parts.join('');
+};
+
+
+  // MathJax config MUST appear before loading MathJax script
+  window.MathJax = {
+    tex: {
+      inlineMath: [['$', '$']],
+      displayMath: [['$$', '$$']],
+      processEscapes: true,
+      processEnvironments: true
+    },
+    options: {
+      skipHtmlTags: ['script', 'noscript', 'style', 'textarea', 'pre', 'code'],
+      ignoreHtmlClass: "no-mathjax",
+      processHtmlClass: "mathjax"
+    }
+  };
+</script>
+<script defer src="./jquery/tex-mml-chtml.js" type="text/javascript"></script>
+<!-- Bootstrap CSS -->
+<link href="./jquery/bootstrap.min.css" rel="stylesheet"/>
+<!-- jQuery and Bootstrap JavaScript -->
+<script src="./jquery/jquery.slim.min.js"></script>
+<script src="./jquery/popper.min.js"></script>
+<script src="./jquery/bootstrap.min.js"></script>
+<script src="jspdf.umd.min.js"></script>
+<!-- Markdown-it and Markdown-it-ex -->
+<script src="./jquery/markdown-it.min.js"></script>
+<script src="./jquery/markdown-it-attrs.js"></script>
+<script src="./jquery/markdown-it-ex.min.js"></script>
+
+    <title>Quiz Form</title>
+
+<style>
+/* === marker colors for inline text === */
+.noteA{ color: var(--noteA, #001373) !important; font-weight:600; }
+.noteZ{ color: var(--noteZ, #731300) !important; font-weight:600; }
+.grey { color: var(--grey,  #555555) !important; }
+
+  :root{
+  --noteA: #001373;
+  --noteZ: #731300;
+
+  --greyL: #555555;
+  --greyD: #aaaaaa;
+  --grey:  var(--greyL);
+
+  --paper: #ffffff;
+  --ink:   #000000;
+
+  --uiBorder: rgba(0,0,0,.25);
+  --uiBg: rgba(255,255,255,.75);
+}
+body.invert-mode{
+  --noteA: #FFEC8C;
+  --noteZ: #8CECFF;
+
+  --grey:  var(--greyD);
+
+  --paper: #000000;
+  --ink:   #ffffff;
+
+  --uiBorder: rgba(255,255,255,.25);
+  --uiBg: rgba(0,0,0,.55);
+}
+/* NOTE theo role */
+svg [data-role="noteA"], svg [data-role="note"] { stroke: var(--noteA) !important; }
+svg [data-role="noteZ"] { stroke: var(--noteZ) !important; }
+
+/* nếu role nằm ở group cha */
+svg [data-role="noteA"] * , svg [data-role="note"] * { stroke: var(--noteA) !important; }
+svg [data-role="noteZ"] * { stroke: var(--noteZ) !important; }
+
+/* GREY theo sort: data-type="grey" */
+svg [data-type="grey"]{ stroke: var(--grey) !important; }
+svg rect[data-type="grey"], svg ellipse[data-type="grey"], svg circle[data-type="grey"]{
+  fill: var(--rect-grey) !important;
+}
+html,body{ background:var(--paper); color:var(--ink); }
+
+  #questionText .q-fig{ margin:12px 0; }
+#questionText .q-svg{
+  display:block;
+  max-width:420px;
+  width:100%;
+  height:auto;
+  margin:0 auto;
+}
+
+/* ===== SVG PANEL (auto) ===== */
+#qaWrap{ width:100%; display:block; }
+.svgPanel{
+  border:1px dashed #bbb;
+  border-radius:12px;
+  padding:10px;
+  margin:12px 20px 20px;
+  max-width:100%;
+  overflow:auto;
+}
+.svgPanel svg{ display:block; max-width:100%; height:auto; }
+/* === SVG FIT STANDARD (shared across Nebo/Form/Slideous) === */
+#svgPanel{ max-height:70vh; }
+#svgPanel svg{ width:100% !important; height:100% !important; display:block; }
+
+/* If SVG uses fixed black strokes, this keeps it visible in dark mode */
+html.inverted #svgPanel.svgInvert svg{ filter: invert(1); }
+html.inverted #questionText .svgInvert svg{ filter: invert(1); }
+html.inverted #reading .svgInvert svg{ filter: invert(1); }
+
+
+@media (orientation: portrait){
+  /* Only split layout when a question actually has SVG */
+  #qaWrap{ display:block; }
+  html.hasSvg #qaWrap{
+    display:grid;
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "stem"
+      "svg"
+      "opts";
+    gap:12px;
+    align-items:start;
+  }
+  html.hasSvg #questionText{ grid-area: stem; }
+  html.hasSvg #svgPanel{ grid-area: svg; margin:12px 20px 0; }
+  html.hasSvg #optionsText{ grid-area: opts; }
+}
+
+@media (orientation: landscape){
+  /* Only split layout when a question actually has SVG */
+  #qaWrap{ display:block; }
+  html.hasSvg #qaWrap{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-areas:
+      "stem svg"
+      "opts opts";
+    gap:12px;
+    align-items:start;
+  }
+  html.hasSvg #questionText{ grid-area: stem; }
+  html.hasSvg #optionsText{ grid-area: opts; }
+  html.hasSvg #svgPanel{ grid-area: svg; margin:20px 20px 20px 0; }
+}
+
+  html.hasSvg #svgPanel{ margin:20px 20px 20px 0; }
+
+
+
+  #invertBtn {
+    position: fixed;
+    top: 52px;
+    left: 52px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    
+    
+    border: none;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.35);
+    cursor: pointer;
+    z-index: 99999;
+    transition: 0.25s;
+  }
+  #invertBtn:hover { transform: scale(1.07); }
+
+
+/* =========================
+   DARK MODE (from form0de - no page filter)
+   Toggle by adding/removing class "inverted" on <html>
+   ========================= */
+html, body{
+  background:#fff;
+  color:#000;
+}
+
+/* Dark */
+html.inverted, body.inverted{
+  background:#0f1115 !important;
+  color:#e8e8e8 !important;
+}
+html.inverted body{ background:#0f1115 !important; }
+
+html.inverted #quizContainer,
+html.inverted #questionContainer{
+  background:#0f1115 !important;
+}
+
+/* Keep inputs readable */
+html.inverted input,
+html.inverted textarea,
+html.inverted select,
+html.inverted .form-control,
+html.inverted .input-box,
+html.inverted #username{
+  background:#151922 !important;
+  color:#e8e8e8 !important;
+  border-color:#666 !important;
+  caret-color:#fff !important;
+  -webkit-text-fill-color:#e8e8e8 !important;
+}
+html.inverted input::placeholder,
+html.inverted textarea::placeholder,
+html.inverted .form-control::placeholder,
+html.inverted #username::placeholder{
+  color: rgba(232,232,232,0.55) !important;
+}
+html.inverted input:focus,
+html.inverted textarea:focus,
+html.inverted select:focus,
+html.inverted .form-control:focus,
+html.inverted #username:focus,
+html.inverted .input-box:focus{
+  background:#000 !important;
+  color:#fff !important;
+  border-color:#808080 !important;
+  outline:none !important;
+  box-shadow:none !important;
+  -webkit-text-fill-color:#fff !important;
+}
+
+/* Prevent Chrome autofill from turning white */
+html.inverted input:-webkit-autofill,
+html.inverted input:-webkit-autofill:hover,
+html.inverted input:-webkit-autofill:focus,
+html.inverted input:-webkit-autofill:active{
+  -webkit-text-fill-color:#fff !important;
+  -webkit-box-shadow:0 0 0 1000px #000 inset !important;
+  box-shadow:0 0 0 1000px #000 inset !important;
+  transition: background-color 9999s ease-in-out 0s;
+}
+
+/* Invert images in question/reading content only (blackboard style) */
+html.inverted #questionText img,
+html.inverted #reading img,
+html.inverted .reading-box img{
+  filter: invert(1);
+}
+
+/* Options base look in dark */
+html.inverted .radio-box,
+html.inverted .checkbox-box{
+  background:#0f1115 !important;
+  color:#e8e8e8 !important;
+  border-color:#e8e8e8 !important;
+}
+
+/* QuickNav match dark */
+html.inverted #quickNavButtons button{
+  background: transparent !important;
+  color:#e8e8e8 !important;
+  border:2px solid #e8e8e8 !important;
+}
+html.inverted #quickNavButtons button.current:not(.saved){
+  color: rgba(232,232,232,0.55) !important;
+  border-color: rgba(232,232,232,0.55) !important;
+}
+html.inverted #quickNavButtons button.saved{
+  background:#808080 !important;
+  color:#fff !important;
+  border-color:#808080 !important;
+}
+
+/* Tabs & popup in dark */
+html.inverted .buttons button{ background:#222 !important; color:#e8e8e8 !important; }
+html.inverted .popup{ background:#151922 !important; color:#e8e8e8 !important; }
+
+/* Hide question scrollbar (scroll still works) */
+#questionContainer{ scrollbar-width:none; }
+#questionContainer::-webkit-scrollbar{ width:0; height:0; }
+
+.popup { background:white; color:black; }
+/* ===== Loading overlay (show UI only after config+questions ready) ===== */
+body.loading #quizContainer,
+body.loading #timer,
+body.loading #tab {
+  display: none !important;
+}
+
+#loadingOverlay {
+  background:#808080;
+  position: fixed;
+  inset: 0;
+  z-index: 999999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+#loadingOverlay .loadingBox {
+    background:#808080;
+
+  font-size: 1.4rem;
+
+  padding: 20px 30px;
+  border-radius: 10px;
+}
+
+
+/* ===== Selected file list (Part 4 upload) ===== */
+
+
+/* ===== PATCH: Dark mode readability for timer + question text ===== */
+html.inverted #timer{
+  color:#e8e8e8 !important;
+  opacity: 1 !important;
+}
+
+html.inverted #questionContainer,
+html.inverted #questionText{
+  color:#e8e8e8 !important;
+}
+
+/* Ensure any explicit black text inside question area becomes readable */
+html.inverted #questionText *,
+html.inverted #questionContainer *{
+  color:#e8e8e8 !important;
+}
+
+/* Keep muted labels (if any) slightly softer */
+html.inverted .muted,
+html.inverted .hint,
+html.inverted .note{
+  color:#b9c0c8 !important;
+}
+
+/* Placeholder color */
+html.inverted input::placeholder{
+  color:#b9c0c8 !important;
+}
+
+
+/* =========================
+   DARK MODE PATCH (from de-style) – fixes:
+   1) Selected answers -> gray #808080 in parts 1/2 (radio + checkbox)
+   2) Username input focus stays dark (Bootstrap override)
+   3) No white edge on scroll in dark
+   ========================= */
+
+/* 1) Selected answers -> gray */
+html.inverted .radio-container input[type="radio"]:checked ~ .radio-box{
+  background:#808080 !important;
+  color:#fff !important;
+  border-color:#808080 !important;
+}
+html.inverted .checkbox-container input[type="checkbox"]:checked ~ .checkbox-box{
+  background:#808080 !important;
+  color:#fff !important;
+  border-color:#808080 !important;
+}
+
+/* 2) Username input: keep dark on focus/click (Bootstrap) */
+html.inverted body input#username.form-control,
+html.inverted body input#username{
+  background-color:#0f1115 !important;
+  color:#e8e8e8 !important;
+  border-color:#808080 !important;
+  caret-color:#ffffff !important;
+  box-shadow:none !important;
+  outline:none !important;
+}
+html.inverted body input#username.form-control:focus,
+html.inverted body input#username:focus{
+  background-color:#0f1115 !important;
+  color:#ffffff !important;
+  border-color:#ffffff !important;
+  box-shadow:none !important;
+  outline:none !important;
+  -webkit-text-fill-color:#ffffff !important;
+}
+html.inverted body input#username.form-control:-webkit-autofill,
+html.inverted body input#username.form-control:-webkit-autofill:hover,
+html.inverted body input#username.form-control:-webkit-autofill:focus{
+  -webkit-text-fill-color:#e8e8e8 !important;
+  box-shadow:0 0 0 1000px #0f1115 inset !important;
+  transition: background-color 999999s ease-in-out 0s;
+}
+
+/* 3) Background sync to prevent white edge on overscroll */
+html.inverted,
+html.inverted body,
+html.inverted #quizContainer,
+html.inverted #questionContainer{
+  background:#0f1115 !important;
+}
+#questionContainer{
+  overscroll-behavior: contain;
+}
+
+
+/* ===== SUBMITTED MODE: ẩn toàn bộ UI làm bài, chỉ hiện kết quả ===== */
+html.submitted body, body.submitted{
+  overflow: hidden !important;
+}
+
+body.submitted #quizContainer,
+body.submitted #questionContainer,
+body.submitted #tab,
+body.submitted #quickNavButtons,
+body.submitted #timer,
+body.submitted #dateDisplay,
+body.submitted #username,
+body.submitted #submit-button,
+body.submitted #fileList,
+body.submitted #custom,
+body.submitted #media,
+body.submitted .sidebar,
+body.submitted .radio-container,
+body.submitted .checkbox-container{
+  display: none !important;
+}
+
+body.submitted #responseBox{
+  display: block !important;
+}
+
+
+
+/* ===== PATCH: Trạng thái 'đang làm' (current) – tô mờ cả sáng & tối ===== */
+#quickNavButtons button.current{
+  opacity: 0.55;
+}
+html.inverted #quickNavButtons button.current{
+  opacity: 0.40;
+}
+/* =========================
+   HIDE ALL SCROLLBARS (KEEP SCROLLING)
+   Áp dụng cho toàn bộ HTML
+   ========================= */
+
+/* Firefox */
+* {
+  scrollbar-width: none !important;
+}
+
+/* Chrome, Edge, Safari */
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;
+}
+
+/* Đảm bảo không lộ mép khi overscroll */
+html, body {
+  overscroll-behavior: none;
+}
+
+/* Các vùng thường hay lộ scrollbar */
+#questionContainer,
+#reading,
+#quizContainer,
+.sidebar,
+#quickNavButtons {
+  scrollbar-width: none !important;
+}
+
+#questionContainer::-webkit-scrollbar,
+#reading::-webkit-scrollbar,
+#quizContainer::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar,
+#quickNavButtons::-webkit-scrollbar {
+  display: none !important;
+}
+
+</style>
+
+
+<style id="scrollQuestionOnlyPatch">
+/* === PATCH: only question area scrolls; top UI stays fixed in flow === */
+html{
+  height:100% !important;
+  width:100% !important;
+  margin:0 !important;
+  padding:0 !important;
+}
+body{
+  height:100% !important;
+  width:100% !important;
+  overflow:hidden !important; /* body will NOT scroll */
+}
+
+/* Make main container a flex column; header (form-container) stays, question area scrolls */
+#quizContainer{
+  display:flex !important;
+  flex-direction:column !important;
+  flex:1 1 auto !important;
+  min-height:0 !important; /* allow children to shrink for scroll */
+}
+#quizContainer .form-container{
+  flex:0 0 auto !important;
+}
+#questionContainer{
+  flex:1 1 auto !important;
+  min-height:0 !important;
+  overflow-y:auto !important;
+  overflow-x:hidden !important;
+  -webkit-overflow-scrolling:touch !important;
+}
+
+/* Stop absolute sizing that breaks scrolling */
+#questionText{
+  position:relative !important;
+  height:auto !important;
+  width:100% !important;
+  max-width:100% !important;
+  margin:0 !important;
+}
+
+/* Orientation-aware page layout */
+@media (orientation: portrait){
+  body{ display:flex !important; flex-direction:column !important; height:100vh !important; }
+  .sidebar{ flex:0 0 auto !important; }
+  #quizContainer{ flex:1 1 auto !important; min-height:0 !important; }
+}
+@media (orientation: landscape){
+  body{ display:flex !important; flex-direction:row !important; height:100vh !important; }
+  .sidebar{ flex:0 0 auto !important; }
+  #quizContainer{ flex:1 1 auto !important; min-height:0 !important; }
+}
+
+/* === PATCH v3: paint base background consistently.
+   In inverted mode, the FILTER on html will invert this white base to appear dark. === */
+html, body{
+  background:#ffffff !important; /* base (bright); inverted -> appears dark */
+}
+/* Ensure scroll area paints its own background (prevents margin/overscroll showing white) */
+#quizContainer, #questionContainer{
+  background:inherit !important;
+}
+#questionContainer{
+  overscroll-behavior: contain;
+}
+
+/* ===== SUBMITTED MODE: ẩn toàn bộ UI làm bài, chỉ hiện kết quả ===== */
+html.submitted body, body.submitted{
+  overflow: hidden !important;
+}
+
+body.submitted #quizContainer,
+body.submitted #questionContainer,
+body.submitted #tab,
+body.submitted #quickNavButtons,
+body.submitted #timer,
+body.submitted #dateDisplay,
+body.submitted #username,
+body.submitted #submit-button,
+body.submitted #fileList,
+body.submitted #custom,
+body.submitted #media,
+body.submitted .sidebar,
+body.submitted .radio-container,
+body.submitted .checkbox-container{
+  display: none !important;
+}
+
+body.submitted #responseBox{
+  display: block !important;
+}
+
+  /* Dark mode: upload/submit icon visible */
+  html.inverted .custom-file-upload{ color:#e8e8e8 !important; border-color:#e8e8e8 !important; }
+  html.inverted .custom-file-upload:hover{ color:#ffffff !important; }
+  html.inverted #timer{ color:#e8e8e8 !important; }
+  html.inverted #questionText, html.inverted #reading{ color:#e8e8e8 !important; }
+  /* Current question highlight in dark */
+  html.inverted #quickNavButtons button.current,
+  html.inverted #quickNavButtons button.active{
+    border-color:#ffffff !important;
+    color:#ffffff !important;
+  }
+</style>
+<style id="timeGateLockedPatch">
+/* === TIME GATE: outside allowed time show ONLY the time notice === */
+#dateDisplay{
+  position: fixed;
+  inset: 0;
+  display: none;
+  z-index: 9999999;
+  padding: 18px;
+  font-size: 16px;
+  line-height: 1.5;
+  background: #0f1115;
+  color: #e8e8e8;
+}
+html.locked #dateDisplay{ display:block; }
+</style>
+
+</head>
+<body>
+<div id="loadingOverlay">
+  <div class="loadingBox">⏳ Đang tải đề…</div>
+</div>
+<script>document.body.classList.add('loading');</script>
+
+  <div class="sidebar">
+<div class="buttons hidden" id="tab">
+<button onclick="switchSection('one')">◎ </button>
+<button onclick="switchSection('two')">☒</button>
+<button onclick="switchSection('three')">▭</button>
+<button onclick="switchSection('four')"> ✎_ </button>
+</div>
+<div class="extra-divs">
+<div id="quickNavButtons"></div>
+<div id="fileList" class="file-list-nav" style="display:none;"></div>
+</div>
+</div>
+<div id="quizContainer">
+<div class="form-container">
+<span id="timer" width="100px">00:00</span>
+<form id="BT">
+  <div style="display:flex; align-items:center; gap:10px;">
+    <input class="form-control" id="username" name="name" maxlength="3"
+           pattern="^[0-4G][0-9V]#$" placeholder="TT#" required size="3" type="text"
+           style="max-width:140px;"/>
+    <span class="form-group mt-2" id="custom">
+      <label class="custom-file-upload" for="media">&#9993;</label>
+      <input class="form-control-file" id="media" name="media" type="file" multiple accept=".jpg,.jpeg,.png,.pdf"/>
+    </span>
+  </div>
+  <div id="fileList" class="file-list" style="display:none;"></div>
+  <input class="form-control" id="score" name="message" style="display:none;" type="text"/>
+  <button class="btn btn-primary btn-block" id="submit-button" style="display:none;" type="submit">Submit</button>
+</form><form id="questionForm"> </form>
+</div>
+
+<div id="questionContainer">
+<div id="reading" class="reading-box mathjax" style="display:none;" ></div>
+<div id="qaWrap">
+
+<div id="questionText" class="mathjax" style="padding:20px;"></div>
+  <div id="svgPanel" class="svgPanel" hidden></div>
+<div id="optionsText" class="mathjax" style="padding:0 20px 20px;"></div>
+
+</div>
+
+</div>
+</div>
+<span id="dateDisplay"></span>
+
+  <script>
+        const md = window.markdownit({
+            html: true,
+            breaks: true,
+            linkify: true,
+            typographer: true,
+        });
+
+       md.use(window.markdownitMultimdTable, {
+            multiline: true,
+            rowspan: true,
+            columnspan: true,
+            headerless: true,
+            allowCellNoPadding: true
+        });
+
+        md.use(window.markdownitDiv);
+        md.use(window.markdownitSup);
+        md.use(window.markdownitSub);
+        md.use(window.markdownitIns);
+        md.use(window.markdownitMark);
+        md.use(window.markdownitDeflist);
+
+          md.use(window.markdownItAttrs);
+         md.use(bracketed_spans_plugin);
+
+
+/* === AUTO APPLY ((...)) MARKERS FOR ALL markdown render === */
+(function(){
+  try{
+    if(typeof window.markToSpan !== 'function') return;
+    const _render = md.render.bind(md);
+    md.render = function(src, env){
+      return _render(window.markToSpan(src), env);
+    };
+  }catch(_){}
+})();
+// ===== MathJax typeset helper (serialize + scope) =====
+let __mjChain = Promise.resolve();
+function typesetMathIn(el) {
+  if (!window.MathJax || !MathJax.typesetPromise) return Promise.resolve();
+  const targets = el ? [el] : undefined;
+  __mjChain = __mjChain.then(() => MathJax.typesetPromise(targets)).catch(err => console.error("❌ MathJax error:", err));
+  return __mjChain;
+}
+
+
+
+
+
+// ===== SVG TAG SUPPORT (prefix !/?/@n@ then [svg:id]) =====
+window.SVG_BANK = window.SVG_BANK || {}; // you can define SVGs in questions file
+function extractSvgTag(s){
+  const re = /^(\s*(?:[!?]+|@\d+@)*)\s*\[svg:(\d+)\]\s*/i;
+  const m = (s || "").match(re);
+  if(!m) return { svgId:null, text:s||"" };
+  const prefix = m[1] || "";
+  const svgId = parseInt(m[2], 10);
+  const rest = (s || "").slice(m[0].length);
+  return { svgId, text: (prefix + rest).trimStart() };
+}
+function renderSVGById(svgId){
+  const panel = document.getElementById("svgPanel");
+  if(!panel) return;
+
+  const root = document.documentElement; // <html>
+  const bank = window.SVG_BANK || {};
+
+  if(!svgId || !bank[svgId]){
+    panel.innerHTML = "";
+    panel.hidden = true;
+    root.classList.remove("hasSvg");
+    panel.classList.remove("svgInvert");
+    return;
+  }
+
+  panel.innerHTML = bank[svgId];
+  // --- SVG FIT STANDARD: contain + center, never crop ---
+  try{
+    panel.querySelectorAll('svg').forEach(s=>{
+      if(!s.getAttribute('preserveAspectRatio')) s.setAttribute('preserveAspectRatio','xMidYMid meet');
+      // If an injected svg misses viewBox but has width/height, derive a viewBox
+      if(!s.getAttribute('viewBox')){
+        const w = parseFloat(s.getAttribute('width'));
+        const h = parseFloat(s.getAttribute('height'));
+        if(Number.isFinite(w) && Number.isFinite(h)) s.setAttribute('viewBox', `0 0 ${w} ${h}`);
+      }
+    });
+  }catch(_){}
+
+  // Execute any <script> inside injected SVG (except svgjson)
+  __execEmbeddedScripts(panel);
+  // Render svgjson placeholders (param/surface)
+  __applySvgJsonTo(panel);
+  try{ if(window.applyGeometry) window.applyGeometry(panel); }catch(_){ }
+  panel.hidden = false;
+  root.classList.add("hasSvg");
+  // Decide whether to invert SVG in dark/invert mode.
+  // If the SVG uses currentColor, we should NOT invert (it already matches text color).
+  // If the SVG contains fixed dark colors (black/#000/rgba(0,...)), we enable invert.
+  panel.classList.remove("svgInvert");
+  const svgMarkup = String(bank[svgId] || "");
+  const usesCurrent = /currentColor/i.test(svgMarkup);
+  if(!usesCurrent){
+    // SVG does not follow text color; invert it in inverted mode for readability
+    panel.classList.add("svgInvert");
+  }
+
+}
+
+// ===== Param/Surface SVGJSON (static, no grid, no animation) =====
+const EXPR_SAFE_RE = /^[0-9+*/^()., a-zA-Z_\-]+$/;
+function compileExpr(expr, vars){
+  const src = String(expr ?? '').trim();
+  if(!src) throw new Error('empty expr');
+  if(!EXPR_SAFE_RE.test(src)) throw new Error('unsafe expr: ' + src);
+  const js = src.replace(/\^/g,'**');
+  const header =
+`"use strict";
+const {sin,cos,tan,asin,acos,atan,atan2,abs,sqrt,pow,exp,log,log10,PI,E,min,max,floor,ceil,round,sign} = Math;
+const pi = PI;
+return (${js});`;
+  return new Function((vars||[]).join(','), header);
+}
+
+/* --- coordinate mapping: world -> local SVG (in a box w×h) --- */
+function makeWorldToSvg(spec){
+  const w = Number(spec.width ?? 240);
+  const h = Number(spec.height ?? 140);
+  const xmin = Number(spec.xmin ?? -1), xmax = Number(spec.xmax ?? 1);
+  const ymin = Number(spec.ymin ?? -1), ymax = Number(spec.ymax ?? 1);
+  const sx = (x)=> (x - xmin) * (w/(xmax-xmin));
+  const sy = (y)=> (ymax - y) * (h/(ymax-ymin)); // invert Y
+  return {w,h,sx,sy};
+}
+/* --- proj3D helpers (x,y,z + m,s) --- */
+function __projectXYZ(x, y, z, theta, m){
+  const th = Number.isFinite(theta) ? +theta : 0;
+  const mm = Number.isFinite(m) ? +m : 1;
+  const k  = Math.sqrt(Math.max(0, 1 - mm*mm));
+  const cs = Math.cos(th), sn = Math.sin(th);
+  const X = x*cs - y*sn;
+  const Y = mm*(x*sn + y*cs) + k*z;
+  return [X, Y];
+}
+
+function __readMS(spec){
+  const v = (spec && spec.vars) ? spec.vars : {};
+  let m = v.m ?? spec.m ?? 1;
+  let s = v.s ?? spec.s ?? spec.theta ?? 0;
+
+  if(typeof m === 'string') m = +compileExpr(m, [])();
+  else m = +m;
+
+  if(typeof s === 'string') s = +compileExpr(s, [])();
+  else s = +s;
+
+  return {m, s};
+}
+
+//* --- 1) Param -> <path> element --- */
+function makeParamPathEl(spec){
+  const {sx,sy} = makeWorldToSvg(spec);
+
+  const hasZ = (spec && (spec.zExpr != null || spec.cExpr != null));
+  const fx = compileExpr(spec.xExpr ?? spec.x ?? 't', ['t']);
+  const fy = compileExpr(spec.yExpr ?? spec.y ?? 't', ['t']);
+  const fz = hasZ ? compileExpr((spec.zExpr!=null ? spec.zExpr : spec.cExpr) ?? '0', ['t']) : null;
+
+  const {m, s} = __readMS(spec);
+
+  const tmin = Number(spec.tmin ?? spec.t0 ?? 0);
+  let tmax;
+  if(typeof spec.tmax === 'string') tmax = Number(compileExpr(spec.tmax, [])());
+  else tmax = Number(spec.tmax ?? spec.t1 ?? 1);
+
+  // ✅ NEW: dt support (fallback to steps)
+  const dt = (spec.dt != null ? Number(spec.dt) : null);
+  let steps;
+
+  if (dt && Number.isFinite(dt) && dt > 0) {
+    // tính steps từ dt
+    steps = Math.max(2, Math.floor((tmax - tmin) / dt) + 1);
+  } else {
+    // tương thích ngược: dùng steps như cũ
+    steps = Math.max(2, Number(spec.steps ?? 240));
+  }
+
+  let d = '';
+  for(let i=0;i<steps;i++){
+    // ✅ NEW: t theo dt, không nội suy theo steps nữa
+    let t;
+    if (dt && Number.isFinite(dt) && dt > 0) {
+      t = tmin + i * dt;
+      if (t > tmax + 1e-12) break;      // tránh vượt tmax
+      if (t > tmax) t = tmax;           // chốt đúng điểm cuối
+    } else {
+      t = tmin + (tmax - tmin) * (i/(steps-1));
+    }
+
+    let x = +fx(t), y = +fy(t);
+    if(hasZ){
+      const z = +fz(t);
+      const P = __projectXYZ(x,y,z, s, m);
+      x = P[0]; y = P[1];
+    }
+
+    if(!Number.isFinite(x) || !Number.isFinite(y)) continue;
+    const X = sx(x), Y = sy(y);
+    d += (d==='' ? `M ${X} ${Y}` : ` L ${X} ${Y}`);
+  }
+  if(spec.close || spec.closed) d += ' Z';
+
+  const p = document.createElementNS('http://www.w3.org/2000/svg','path');
+  p.setAttribute('d', d);
+  p.setAttribute('fill', spec.fill ?? 'none');
+  p.setAttribute('stroke', spec.stroke ?? 'currentColor');
+  p.setAttribute('stroke-width', String(spec.strokeWidth ?? 2));
+  p.setAttribute('vector-effect','non-scaling-stroke');
+  p.setAttribute('stroke-linecap', spec.strokeLinecap ?? 'round');
+  p.setAttribute('stroke-linejoin', spec.strokeLinejoin ?? 'round');
+  if(spec.opacity != null) p.setAttribute('opacity', String(spec.opacity));
+  if(spec['stroke-dasharray']) p.setAttribute('stroke-dasharray', String(spec['stroke-dasharray']));
+  return p;
+}
+
+
+/* --- 2) Surface -> <g> element (only u/v lines) --- */
+function makeSurfaceLinesEl(spec){
+  const {sx,sy} = makeWorldToSvg(spec);
+
+  const hasZ = (spec && (spec.zExpr != null || spec.cExpr != null));
+  const fx = compileExpr(spec.xExpr ?? spec.x ?? 'u', ['u','v']);
+  const fy = compileExpr(spec.yExpr ?? spec.y ?? 'v', ['u','v']);
+  const fz = hasZ ? compileExpr((spec.zExpr!=null ? spec.zExpr : spec.cExpr) ?? '0', ['u','v']) : null;
+
+  const {m, s} = __readMS(spec);
+
+  const umin = Number(spec.umin ?? spec.u0 ?? 0);
+  const vmin = Number(spec.vmin ?? spec.v0 ?? 0);
+
+  let umax, vmax;
+  if(typeof spec.umax === 'string') umax = Number(compileExpr(spec.umax, [])());
+  else umax = Number(spec.umax ?? spec.u1 ?? 1);
+
+  if(typeof spec.vmax === 'string') vmax = Number(compileExpr(spec.vmax, [])());
+  else vmax = Number(spec.vmax ?? spec.v1 ?? 1);
+
+  const nu =  Number(spec.nu ?? 4);
+  const nv = Number(spec.nv ?? 4);
+  const segU = Number(spec.segU ?? 200);
+  const segV = Number(spec.segV ?? 200);
+
+  const g = document.createElementNS('http://www.w3.org/2000/svg','g');
+  g.setAttribute('fill','none');
+
+  const stroke = spec.stroke ?? 'currentColor';
+  const sw = spec.strokeWidth ?? 1.2;
+
+  function addPath(points){
+    if(points.length < 2) return;
+    let d='';
+    for(let i=0;i<points.length;i++){
+      const [x,y] = points[i];
+      const X=sx(x), Y=sy(y);
+      d += (i===0)?`M ${X} ${Y}`:` L ${X} ${Y}`;
+    }
+    const p=document.createElementNS('http://www.w3.org/2000/svg','path');
+    p.setAttribute('d', d);
+    p.setAttribute('stroke', stroke);
+    p.setAttribute('stroke-width', String(sw));
+    p.setAttribute('vector-effect','non-scaling-stroke');
+    p.setAttribute('stroke-linecap', spec.strokeLinecap ?? 'round');
+    p.setAttribute('stroke-linejoin', spec.strokeLinejoin ?? 'round');
+    if(spec.opacity != null) p.setAttribute('opacity', String(spec.opacity));
+    if(spec['stroke-dasharray']) p.setAttribute('stroke-dasharray', String(spec['stroke-dasharray']));
+    g.appendChild(p);
+  }
+
+  // constant-u lines
+  for(let i=0;i<nu;i++){
+    const u = umin + (umax-umin)*(i/(nu-1));
+    const pts=[];
+    for(let j=0;j<segV;j++){
+      const v = vmin + (vmax-vmin)*(j/(segV-1));
+      let x = +fx(u,v), y = +fy(u,v);
+      if(hasZ){
+        const z = +fz(u,v);
+        const P = __projectXYZ(x,y,z, s, m);
+        x = P[0]; y = P[1];
+      }
+      if(Number.isFinite(x) && Number.isFinite(y)) pts.push([x,y]);
+    }
+    addPath(pts);
+  }
+
+  // constant-v lines
+  for(let j=0;j<nv;j++){
+    const v = vmin + (vmax-vmin)*(j/(nv-1));
+    const pts=[];
+    for(let i=0;i<segU;i++){
+      const u = umin + (umax-umin)*(i/(segU-1));
+      let x = +fx(u,v), y = +fy(u,v);
+      if(hasZ){
+        const z = +fz(u,v);
+        const P = __projectXYZ(x,y,z, s, m);
+        x = P[0]; y = P[1];
+      }
+      if(Number.isFinite(x) && Number.isFinite(y)) pts.push([x,y]);
+    }
+    addPath(pts);
+  }
+
+  return g;
+}
+
+
+function __execEmbeddedScripts(container){
+  try{
+    const scripts = container.querySelectorAll('script');
+    scripts.forEach(sc=>{
+      const type = (sc.getAttribute('type')||'').toLowerCase();
+      if(type === 'application/svgjson') return; // handled separately
+      const code = sc.textContent || '';
+      if(!code.trim()) { sc.remove(); return; }
+      const s2 = document.createElement('script');
+      if(type) s2.type = type;
+      s2.text = code;
+      document.head.appendChild(s2);
+      sc.remove();
+    });
+  }catch(e){ console.warn(e); }
+}
+
+
+/* ============================================================
+   PATCH: define makeParamPath / makeSurfaceLines (STATIC)
+   Used by svgjson renderer. No animation. No grid.
+   ============================================================ */
+(function(){
+  const NS = "http://www.w3.org/2000/svg";
+  const SAFE_RE = /^[0-9+*/^()., a-zA-Z_\-]+$/; // '-' last => no Range error
+
+  function compile(expr, vars){
+    const src = String(expr ?? '').trim();
+    if(!src) throw new Error("empty expr");
+    if(!SAFE_RE.test(src)) throw new Error("unsafe expr: " + src);
+    const js = src.replace(/\^/g,'**');
+    const header =
+`"use strict";
+const {sin,cos,tan,asin,acos,atan,atan2,abs,sqrt,pow,exp,log,log10,PI,E,min,max,floor,ceil,round,sign} = Math;
+const pi = PI;
+return (${js});`;
+    return new Function((vars||[]).join(','), header);
+  }
+
+  function numOrEval(v){
+    if(typeof v === 'number') return v;
+    if(typeof v === 'string'){
+      // allow "2*pi" etc.
+      return Number(compile(v, [])());
+    }
+    return Number(v);
+  }
+
+  function worldMap(spec, W, H){
+    const w = Number(spec.width ?? W ?? 240);
+    const h = Number(spec.height ?? H ?? 140);
+    const xmin = Number(spec.xmin ?? -1), xmax = Number(spec.xmax ?? 1);
+    const ymin = Number(spec.ymin ?? -1), ymax = Number(spec.ymax ?? 1);
+    const sx = (x)=> (x - xmin) * (w/(xmax-xmin));
+    const sy = (y)=> (ymax - y) * (h/(ymax-ymin));
+    return {w,h,sx,sy};
+  }
+
+  // returns SVGPathElement
+  window.makeParamPath = window.makeParamPath || function(spec, W, H){
+    spec = spec || {};
+    const {sx,sy} = worldMap(spec, W, H);
+    const fx = compile(spec.xExpr ?? spec.x ?? 't', ['t']);
+    const fy = compile(spec.yExpr ?? spec.y ?? 't', ['t']);
+    const t0 = numOrEval(spec.tmin ?? spec.t0 ?? 0);
+    const t1 = numOrEval(spec.tmax ?? spec.t1 ?? 1);
+    const steps = Math.max(2, Number(spec.steps ?? 240));
+    let d='';
+    for(let i=0;i<steps;i++){
+      const t = t0 + (t1-t0)*(i/(steps-1));
+      const x = +fx(t), y = +fy(t);
+      const X = sx(x), Y = sy(y);
+      d += (i===0) ? `M ${X} ${Y}` : ` L ${X} ${Y}`;
+    }
+    if(spec.close || spec.closed) d += ' Z';
+
+    const p = document.createElementNS(NS,'path');
+    p.setAttribute('d', d);
+    p.setAttribute('fill', spec.fill ?? 'none');
+    p.setAttribute('stroke', spec.stroke ?? 'currentColor');
+    p.setAttribute('stroke-width', String(spec.strokeWidth ?? 2));
+    p.setAttribute('vector-effect','non-scaling-stroke');
+    p.setAttribute('stroke-linecap', spec.strokeLinecap ?? 'round');
+    p.setAttribute('stroke-linejoin', spec.strokeLinejoin ?? 'round');
+    if(spec.opacity != null) p.setAttribute('opacity', String(spec.opacity));
+    if(spec['stroke-dasharray']) p.setAttribute('stroke-dasharray', String(spec['stroke-dasharray']));
+    return p;
+  };
+
+  // returns SVGGElement
+  window.makeSurfaceLines = window.makeSurfaceLines || function(spec, W, H){
+    spec = spec || {};
+    const {sx,sy} = worldMap(spec, W, H);
+    const fx = compile(spec.xExpr ?? spec.x ?? 'u', ['u','v']);
+    const fy = compile(spec.yExpr ?? spec.y ?? 'v', ['u','v']);
+
+    const u0 = numOrEval(spec.umin ?? spec.u0 ?? 0);
+    const u1 = numOrEval(spec.umax ?? spec.u1 ?? 1);
+    const v0 = numOrEval(spec.vmin ?? spec.v0 ?? 0);
+    const v1 = numOrEval(spec.vmax ?? spec.v1 ?? 1);
+
+    const nu = Math.max(2, Number(spec.nu ?? 12));
+    const nv = Math.max(2, Number(spec.nv ?? 12));
+    const segU = Math.max(8, Number(spec.segU ?? 70));
+    const segV = Math.max(8, Number(spec.segV ?? 70));
+
+    const g = document.createElementNS(NS,'g');
+    g.setAttribute('fill','none');
+
+    const stroke = spec.stroke ?? 'currentColor';
+    const sw = spec.strokeWidth ?? 1.2;
+
+    function addPath(pts){
+      let d='';
+      for(let i=0;i<pts.length;i++){
+        const [x,y] = pts[i];
+        const X=sx(x), Y=sy(y);
+        d += (i===0)?`M ${X} ${Y}`:` L ${X} ${Y}`;
+      }
+      const p=document.createElementNS(NS,'path');
+      p.setAttribute('d', d);
+      p.setAttribute('stroke', stroke);
+      p.setAttribute('stroke-width', String(sw));
+      p.setAttribute('vector-effect','non-scaling-stroke');
+      p.setAttribute('stroke-linecap', spec.strokeLinecap ?? 'round');
+      p.setAttribute('stroke-linejoin', spec.strokeLinejoin ?? 'round');
+      if(spec.opacity != null) p.setAttribute('opacity', String(spec.opacity));
+      if(spec['stroke-dasharray']) p.setAttribute('stroke-dasharray', String(spec['stroke-dasharray']));
+      g.appendChild(p);
+    }
+
+    // constant-u
+    for(let i=0;i<nu;i++){
+      const u = u0 + (u1-u0)*(i/(nu-1));
+      const pts=[];
+      for(let j=0;j<segV;j++){
+        const v = v0 + (v1-v0)*(j/(segV-1));
+        pts.push([+fx(u,v), +fy(u,v)]);
+      }
+      addPath(pts);
+    }
+    // constant-v
+    for(let j=0;j<nv;j++){
+      const v = v0 + (v1-v0)*(j/(nv-1));
+      const pts=[];
+      for(let i=0;i<segU;i++){
+        const u = u0 + (u1-u0)*(i/(segU-1));
+        pts.push([+fx(u,v), +fy(u,v)]);
+      }
+      addPath(pts);
+    }
+
+    return g;
+  };
+})();
+
+/* ============================================================
+   PATCH2: __applySvgJsonTo uses ph.innerHTML, so helpers must return MARKUP STRING.
+   Override makeParamPath / makeSurfaceLines to return '<path ...>' / '<g>...</g>' (STATIC).
+   ============================================================ */
+(function(){
+  const SAFE_RE = /^[0-9+*/^()., a-zA-Z_\-]+$/;
+  function compile(expr, vars){
+    const src = String(expr ?? '').trim();
+    if(!src) throw new Error("empty expr");
+    if(!SAFE_RE.test(src)) throw new Error("unsafe expr: " + src);
+    const js = src.replace(/\^/g,'**');
+    const header =
+`"use strict";
+const {sin,cos,tan,asin,acos,atan,atan2,abs,sqrt,pow,exp,log,log10,PI,E,min,max,floor,ceil,round,sign} = Math;
+const pi = PI;
+return (${js});`;
+    return new Function((vars||[]).join(','), header);
+  }
+  function numOrEval(v){
+    if(typeof v === 'number') return v;
+    if(typeof v === 'string') return Number(compile(v, [])());
+    return Number(v);
+  }
+  function worldMap(spec){
+    const w = Number(spec.width ?? 240);
+    const h = Number(spec.height ?? 160);
+    const xmin = Number(spec.xmin ?? -1), xmax = Number(spec.xmax ?? 1);
+    const ymin = Number(spec.ymin ?? -1), ymax = Number(spec.ymax ?? 1);
+    const sx = (x)=> (x - xmin) * (w/(xmax-xmin));
+    const sy = (y)=> (ymax - y) * (h/(ymax-ymin));
+    return {sx,sy};
+  }
+
+  // --- proj3D helpers (x,y,z + m,s) for SVGJSON (string markup) ---
+  function __readMS(spec){
+    const v = (spec && typeof spec.vars === 'object' && spec.vars) ? spec.vars : {};
+    let m = (v.m != null) ? v.m : (spec.m != null ? spec.m : 1);
+    let s = (v.s != null) ? v.s : (spec.s != null ? spec.s : (spec.theta != null ? spec.theta : 0));
+    if(typeof m === 'string') m = Number(compile(m, [])());
+    else m = Number(m);
+    if(typeof s === 'string') s = Number(compile(s, [])());
+    else s = Number(s);
+    return {m,s};
+  }
+
+  function __proj3D(x,y,z,s,m){
+    const th = Number.isFinite(s) ? +s : 0;
+    const mm = Number.isFinite(m) ? +m : 1;
+    const k  = Math.sqrt(Math.max(0, 1 - mm*mm));
+    const cs = Math.cos(th), sn = Math.sin(th);
+    const X = x*cs - y*sn;
+    const Y = mm*(x*sn + y*cs) + k*z;
+    return [X,Y];
+  }
+  const esc = (v)=> String(v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  window.makeParamPath = function(spec){
+    spec = spec || {};
+    const {sx,sy} = worldMap(spec);
+    const hasZ = (spec.zExpr != null || spec.cExpr != null);
+    const fx = compile(spec.xExpr ?? spec.x ?? 't', ['t']);
+    const fy = compile(spec.yExpr ?? spec.y ?? 't', ['t']);
+    const fz = hasZ ? compile((spec.zExpr != null ? spec.zExpr : spec.cExpr) ?? '0', ['t']) : null;
+    const {m,s} = __readMS(spec);
+    const t0 = numOrEval(spec.tmin ?? spec.t0 ?? 0);
+    const t1 = numOrEval(spec.tmax ?? spec.t1 ?? 1);
+    const steps = Math.max(2, Number(spec.steps ?? 240));
+    let d='';
+    for(let i=0;i<steps;i++){
+      const t = t0 + (t1-t0)*(i/(steps-1));
+      let x = +fx(t), y = +fy(t);
+      if(hasZ){
+        const z = +fz(t);
+        const P = __proj3D(x,y,z, s, m);
+        x = P[0]; y = P[1];
+      }
+      const X = sx(x), Y = sy(y);
+      d += (i===0) ? `M ${X} ${Y}` : ` L ${X} ${Y}`;
+    }
+    if(spec.close || spec.closed) d += ' Z';
+
+    const fill = (spec.fill ?? 'none');
+    const stroke = (spec.stroke ?? 'currentColor');
+    const sw = (spec.strokeWidth ?? 2);
+    const op = (spec.opacity != null) ? ` opacity="${esc(spec.opacity)}"` : '';
+    const dash = (spec['stroke-dasharray']!=null) ? ` stroke-dasharray="${esc(spec['stroke-dasharray'])}"` : '';
+    const lc = ` stroke-linecap="${esc(spec.strokeLinecap ?? 'round')}"`;
+    const lj = ` stroke-linejoin="${esc(spec.strokeLinejoin ?? 'round')}"`;
+
+    return `<path d="${esc(d)}" fill="${esc(fill)}" stroke="${esc(stroke)}" stroke-width="${esc(sw)}" vector-effect="non-scaling-stroke"${lc}${lj}${op}${dash}></path>`;
+  };
+
+  window.makeSurfaceLines = function(spec){
+    spec = spec || {};
+    const {sx,sy} = worldMap(spec);
+
+    const hasZ = (spec.zExpr != null || spec.cExpr != null);
+    const fx = compile(spec.xExpr ?? spec.x ?? 'u', ['u','v']);
+    const fy = compile(spec.yExpr ?? spec.y ?? 'v', ['u','v']);
+    const fz = hasZ ? compile((spec.zExpr != null ? spec.zExpr : spec.cExpr) ?? '0', ['u','v']) : null;
+
+    const {m,s} = __readMS(spec);
+
+    const u0 = numOrEval(spec.umin ?? spec.u0 ?? 0);
+    const u1 = numOrEval(spec.umax ?? spec.u1 ?? 1);
+    const v0 = numOrEval(spec.vmin ?? spec.v0 ?? 0);
+    const v1 = numOrEval(spec.vmax ?? spec.v1 ?? 1);
+
+    // Prefer du/dv (recommended). Keep nu/nv fallback for old specs.
+    const duIn = (spec.du != null) ? numOrEval(spec.du) : NaN;
+    const dvIn = (spec.dv != null) ? numOrEval(spec.dv) : NaN;
+
+    const nu = Math.max(2, Number(spec.nu ?? 12));
+    const nv = Math.max(2, Number(spec.nv ?? 12));
+
+    const du = (Number.isFinite(duIn) && duIn > 0) ? duIn : (Math.abs(u1-u0) / Math.max(1,(nu-1)));
+    const dv = (Number.isFinite(dvIn) && dvIn > 0) ? dvIn : (Math.abs(v1-v0) / Math.max(1,(nv-1)));
+
+    // auto fine step for splitting (can override with gridPtsStep)
+    let ptsStep = (spec.gridPtsStep != null) ? numOrEval(spec.gridPtsStep) : NaN;
+    if(!Number.isFinite(ptsStep) || ptsStep <= 0){
+      const base = Math.min(du, dv);
+      ptsStep = (Number.isFinite(base) && base > 0) ? Math.max(1e-6, base/3) : 0.02;
+    }
+
+
+    // === AUTO EDGE PAD (avoid losing endpoints / unstable normals near boundary) ===
+    const uSpanAbs = Math.abs(u1-u0);
+    const vSpanAbs = Math.abs(v1-v0);
+    let edgePad = (spec.edgePad != null) ? numOrEval(spec.edgePad) : NaN; // can be absolute or relative (user controlled)
+    let edgePadU = (spec.edgePadU != null) ? numOrEval(spec.edgePadU) : NaN;
+    let edgePadV = (spec.edgePadV != null) ? numOrEval(spec.edgePadV) : NaN;
+
+    // Default: 0.002 * span  (so u:[0,1] => 0.002 like you requested)
+    if(!Number.isFinite(edgePadU)) edgePadU = Number.isFinite(edgePad) ? edgePad : (uSpanAbs>0 ? 0.002*uSpanAbs : 0);
+    if(!Number.isFinite(edgePadV)) edgePadV = Number.isFinite(edgePad) ? edgePad : (vSpanAbs>0 ? 0.002*vSpanAbs : 0);
+
+    // Cap: never eat more than 45% of span
+    edgePadU = Math.min(Math.max(0, edgePadU), 0.45*uSpanAbs);
+    edgePadV = Math.min(Math.max(0, edgePadV), 0.45*vSpanAbs);
+
+    const u0p = u0 + edgePadU, u1p = u1 - edgePadU;
+    const v0p = v0 + edgePadV, v1p = v1 - edgePadV;
+
+    const __useU0 = (u0p < u1p) ? u0p : u0;
+    const __useU1 = (u0p < u1p) ? u1p : u1;
+    const __useV0 = (v0p < v1p) ? v0p : v0;
+    const __useV1 = (v0p < v1p) ? v1p : v1;
+
+    function clamp(x,a,b){ return (x<a)?a : (x>b)?b : x; }
+
+    const stroke = (spec.stroke ?? 'currentColor');
+    const sw = (spec.strokeWidth ?? 1.2);
+    const op = (spec.opacity != null) ? ` opacity="${esc(spec.opacity)}"` : '';
+    const lc = ` stroke-linecap="${esc(spec.strokeLinecap ?? 'round')}"`;
+    const lj = ` stroke-linejoin="${esc(spec.strokeLinejoin ?? 'round')}"`;
+
+    const showHidden = (spec.showHidden != null) ? !!spec.showHidden : true;
+    const hiddenDash = esc(String(spec.hiddenDash ?? spec.dashHidden ?? "4 4"));
+
+    function pathFromPts(pts, dashed){
+      if(pts.length < 2) return '';
+      let d='';
+      for(let i=0;i<pts.length;i++){
+        const [x,y]=pts[i];
+        d += (i===0)?`M ${x} ${y}`:` L ${x} ${y}`;
+      }
+      const dash = dashed ? ` stroke-dasharray="${hiddenDash}"` : '';
+      return `<path d="${esc(d)}" fill="none" stroke="${esc(stroke)}" stroke-width="${esc(sw)}" vector-effect="non-scaling-stroke"${lc}${lj}${op}${dash}></path>`;
+    }
+
+    // If no z, no hidden concept: draw all solid like before.
+    if(!fz){
+      // fallback old style sampling using du/dv
+      function rangeVals(a,b,step){
+        const out=[];
+        if(!Number.isFinite(step) || step<=0){ out.push(a,b); return out; }
+        const dir=(b>=a)?1:-1;
+        const st=Math.abs(step)*dir;
+        for(let t=a; dir>0?(t<=b+1e-12):(t>=b-1e-12); t+=st){
+          out.push(t);
+          if(out.length>20000) break;
+        }
+        if(out.length && Math.abs(out[out.length-1]-b)>1e-9) out.push(b);
+        return out;
+      }
+      const uVals = rangeVals(u0,u1,du);
+      const vVals = rangeVals(v0,v1,dv);
+
+      let out = '<g fill="none">';
+      for(const u of uVals){
+        const pts=[];
+        const vFine = rangeVals(__useV0,__useV1,ptsStep);
+        for(const v of vFine){
+          const x = +fx(u,v), y = +fy(u,v);
+          const X = sx(x), Y = sy(y);
+          if(Number.isFinite(X)&&Number.isFinite(Y)) pts.push([X,Y]);
+        }
+        out += pathFromPts(pts,false);
+      }
+      for(const v of vVals){
+        const pts=[];
+        const uFine = rangeVals(__useU0,__useU1,ptsStep);
+        for(const u of uFine){
+          const x = +fx(u,v), y = +fy(u,v);
+          const X = sx(x), Y = sy(y);
+          if(Number.isFinite(X)&&Number.isFinite(Y)) pts.push([X,Y]);
+        }
+        out += pathFromPts(pts,false);
+      }
+      out += '</g>';
+      return out;
+    }
+
+    // --- Hidden-line split by sign of N · V ---
+    function rangeVals(a,b,step){
+      const out=[];
+      if(!Number.isFinite(step) || step<=0){ out.push(a,b); return out; }
+      const dir=(b>=a)?1:-1;
+      const st=Math.abs(step)*dir;
+      for(let t=a; dir>0?(t<=b+1e-12):(t>=b-1e-12); t+=st){
+        out.push(t);
+        if(out.length>20000) break;
+      }
+      if(out.length && Math.abs(out[out.length-1]-b)>1e-9) out.push(b);
+      return out;
+    }
+
+    function pos(u,v){
+      const x=+fx(u,v), y=+fy(u,v), z=+fz(u,v);
+      if(!Number.isFinite(x)||!Number.isFinite(y)||!Number.isFinite(z)) return null;
+      return {x,y,z};
+    }
+
+    // numerical normal
+    const uSpan = Math.max(1e-6, Math.abs(u1-u0));
+    const vSpan = Math.max(1e-6, Math.abs(v1-v0));
+    const epsU = Math.max(1e-6, uSpan*1e-4);
+    const epsV = Math.max(1e-6, vSpan*1e-4);
+
+    function sub(A,B){ return {x:A.x-B.x, y:A.y-B.y, z:A.z-B.z}; }
+    function cross(a,b){ return {x:a.y*b.z-a.z*b.y, y:a.z*b.x-a.x*b.z, z:a.x*b.y-a.y*b.x}; }
+    function normal(u,v){
+      // Use boundary-safe (one-sided) differences so endpoints don't disappear
+      const uA = clamp(u-epsU, u0, u1), uB = clamp(u+epsU, u0, u1);
+      const vA = clamp(v-epsV, v0, v1), vB = clamp(v+epsV, v0, v1);
+      if(uA === uB || vA === vB) return null;
+
+      const puB = pos(uB, v), puA = pos(uA, v);
+      const pvB = pos(u, vB), pvA = pos(u, vA);
+      if(!puB||!puA||!pvB||!pvA) return null;
+
+      return cross(sub(puB,puA), sub(pvB,pvA));
+    }
+
+    // view vector derived from (m,s)
+    const th = Number(s);
+    const mm = Number(m);
+    const k  = Math.sqrt(Math.max(0, 1 - mm*mm));
+    const Vx = -k*Math.sin(th);
+    const Vy = -k*Math.cos(th);
+    const Vz = mm;
+
+    function proj2(P){
+      const P2 = __proj3D(P.x,P.y,P.z, s, m);
+      const X = sx(P2[0]);
+      const Y = sy(P2[1]);
+      return [X,Y];
+    }
+
+    function splitCurve(paramVals, getUV){
+      const visPts=[], hidPts=[];
+      let seg=[], segVis=null;
+      let prevP=null, prevS=null;
+
+      function flush(){
+        if(seg.length>=2){
+          if(segVis) visPts.push(seg.slice());
+          else hidPts.push(seg.slice());
+        }
+        seg=[];
+      }
+
+      for(let i=0;i<paramVals.length;i++){
+        const t=paramVals[i];
+        const uv=getUV(t);
+        const P=pos(uv.u, uv.v);
+        const N=normal(uv.u, uv.v);
+        if(!P || !N){
+          flush(); prevP=null; prevS=null; segVis=null;
+          continue;
+        }
+        const sgn = N.x*Vx + N.y*Vy + N.z*Vz;
+        const isVis = (sgn < 0); // convention matched with earlier engine
+        const XY = proj2(P);
+
+        if(prevP===null){
+          segVis=isVis;
+          seg.push(XY);
+          prevP=P; prevS=sgn;
+          continue;
+        }
+
+        const s0=prevS, s1=sgn;
+        const change = (s0===0)?true:(s0*s1<0);
+
+        if(change){
+          const tFrac = (s0===s1)?0.5:(s0/(s0-s1));
+          const Pb={x: prevP.x+(P.x-prevP.x)*tFrac,
+                    y: prevP.y+(P.y-prevP.y)*tFrac,
+                    z: prevP.z+(P.z-prevP.z)*tFrac};
+          const XYb = proj2(Pb);
+          seg.push(XYb);
+          flush();
+          segVis=isVis;
+          seg.push(XYb);
+          seg.push(XY);
+        }else{
+          if(segVis!==isVis){
+            flush();
+            segVis=isVis;
+          }
+          seg.push(XY);
+        }
+
+        prevP=P; prevS=sgn;
+      }
+      flush();
+      return {visPts, hidPts};
+    }
+
+    const uVals = rangeVals(u0,u1,du);
+    const vVals = rangeVals(v0,v1,dv);
+    const uFine = rangeVals(__useU0,__useU1,ptsStep);
+    const vFine = rangeVals(__useV0,__useV1,ptsStep);
+
+    let out = '<g fill="none">';
+    // u fixed
+    for(const u of uVals){
+      const r = splitCurve(vFine, (t)=>({u, v:t}));
+      for(const seg of r.visPts) out += pathFromPts(seg,false);
+      if(showHidden){
+        for(const seg of r.hidPts) out += pathFromPts(seg,true);
+      }
+    }
+    // v fixed
+    for(const v of vVals){
+      const r = splitCurve(uFine, (t)=>({u:t, v}));
+      for(const seg of r.visPts) out += pathFromPts(seg,false);
+      if(showHidden){
+        for(const seg of r.hidPts) out += pathFromPts(seg,true);
+      }
+    }
+    out += '</g>';
+    return out;
+  };
+})();
+
+function __applySvgJsonTo(container){
+  try{
+    const svgs = container.querySelectorAll('svg');
+    svgs.forEach(svg=>{
+      // read all svgjson scripts inside this svg
+      const dict = new Map();
+      svg.querySelectorAll('script[type="application/svgjson"]').forEach(sc=>{
+        try{
+          const arr = JSON.parse(sc.textContent || '[]');
+          (arr||[]).forEach(spec=>{
+            if(spec && (spec.id!=null)) dict.set(String(spec.id), spec);
+          });
+        }catch(e){ console.warn('bad svgjson', e); }
+      });
+
+      // fill placeholders
+      svg.querySelectorAll('g[data-svg]').forEach(ph=>{
+        const id = ph.getAttribute('data-svg');
+        const spec = dict.get(String(id));
+        if(!spec) return;
+        try{
+          if(String(spec.type).toLowerCase()==='param'){
+            ph.innerHTML = makeParamPath(spec);
+          }else if(String(spec.type).toLowerCase()==='surface'){
+            ph.innerHTML = makeSurfaceLines(spec);
+          }
+        }catch(e){ console.warn('render spec failed', id, e); }
+      });
+    });
+  }catch(e){ console.warn(e); }
+}
+
+
+/* ================= GEOMETRY PATH & PATTERN HELPERS (P/K + patterns) =================
+   - path[data-d] supports:
+     M x y
+     L x y
+     P bx by cx cy      (parabola through A(last), B, C)  -> Q control=B end=C
+     K bx by cx cy      (circular arc through A(last), B, C) -> SVG A command
+     Z                  (close)
+   - Patterns usable as: fill="url(#patHashX)" etc.
+*/
+(function(){
+  
+  var GEO_DEFS = 
+ `<defs id="geoDefs">
+    <pattern id="patR" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M0.6 0.6 L 4.2 4.2"
+      stroke="#808080" stroke-width="0.6" fill="none"/>
+</pattern>
+  
+<pattern id="patL" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M0.6 4.2 L 4.2 0.6"
+      stroke="#808080" stroke-width="0.6" fill="none"/>
+</pattern>
+
+  
+
+  <pattern id="patH" patternUnits="userSpaceOnUse"
+           width="4.8" height="4.8">
+    <path d="M0 2.4 H 4.8"
+          fill="none" stroke="#808080" stroke-width="0.5" opacity="1"/>
+  </pattern>
+<pattern id="patV" patternUnits="userSpaceOnUse"
+         width="4.8" height="4.8">
+  <path d="M2.4 0  V4.8"
+          fill="none" stroke="#808080" stroke-width="0.5" opacity="1"/>       
+</pattern>
+  
+  
+<pattern id="patD" patternUnits="userSpaceOnUse"
+           width="4.8" height="4.8">
+    <circle cx="2.4" cy="2.4" r="0.6" fill="#808080" opacity="1"/>
+  </pattern>
+
+  
+
+  
+</defs>
+`;
+
+function _geoEnsureDefs(svg){
+    try{
+      if(!svg || !svg.querySelector) return;
+      if(svg.querySelector('#geoDefs')) return;
+      // make sure currentColor resolves (inherit text color by default)
+      try{ if(!svg.getAttribute('color') && !svg.style.color){ svg.style.color = 'currentColor'; } }catch(_){ }
+      svg.insertAdjacentHTML('afterbegin', GEO_DEFS);
+    }catch(_){}
+  }
+
+  function _geoArcFrom3Points(A,B,C){
+    try{
+      if(!A||!B||!C) return null;
+      var ax=A[0], ay=A[1], bx=B[0], by=B[1], cx=C[0], cy=C[1];
+      // determinant
+      var d = 2*(ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
+      if(!isFinite(d) || Math.abs(d) < 1e-9) return null;
+
+      var ax2 = ax*ax + ay*ay;
+      var bx2 = bx*bx + by*by;
+      var cx2 = cx*cx + cy*cy;
+
+      var ux = (ax2*(by-cy) + bx2*(cy-ay) + cx2*(ay-by)) / d;
+      var uy = (ax2*(cx-bx) + bx2*(ax-cx) + cx2*(bx-ax)) / d;
+
+      var r = Math.hypot(ax-ux, ay-uy);
+      if(!isFinite(r) || r < 1e-9) return null;
+
+      // sweep: decide direction so that arc goes A->C passing near B
+      function ang(x,y){ return Math.atan2(y-uy, x-ux); }
+      var a1 = ang(ax,ay), a2 = ang(bx,by), a3 = ang(cx,cy);
+      function norm(t){ while(t<0)t+=Math.PI*2; while(t>=Math.PI*2)t-=Math.PI*2; return t; }
+      a1=norm(a1); a2=norm(a2); a3=norm(a3);
+
+      // check if a2 is on CCW path from a1 to a3
+      function isBetweenCCW(a, b, c){
+        // b between a->c CCW
+        if(a<=c) return (a<=b && b<=c);
+        return (a<=b || b<=c);
+      }
+      var sweep = isBetweenCCW(a1,a2,a3) ? 1 : 0;
+      return {r: +r.toFixed(6), sweep: sweep, end: C};
+    }catch(_){ return null; }
+  }
+
+  function applyGeometry(root){
+    root = root || document;
+    var paths = (root.querySelectorAll ? root.querySelectorAll('path[data-d]') : []);
+    for(var i=0;i<paths.length;i++){
+      var p = paths[i];
+      try{
+        var dd = (p.getAttribute('data-d')||'').trim();
+        if(!dd) continue;
+
+        // ensure defs exist in the owning svg
+        try{
+          var svg = p.ownerSVGElement || (p.closest ? p.closest('svg') : null);
+          if(svg) _geoEnsureDefs(svg);
+        }catch(_){}
+
+        var lines = dd.split(/\n+/);
+        var out = [];
+        var last = null;
+
+        for(var j=0;j<lines.length;j++){
+          var l = (lines[j]||'').trim();
+          if(!l) continue;
+          var c = l.charAt(0);
+
+          if(c==='M' || c==='L'){
+            out.push(l);
+            var parts = l.slice(1).trim().split(/\s+/).map(Number);
+            if(parts.length>=2) last = [parts[0], parts[1]];
+          }else if(c==='P'){ // parabola: A=last, B, C -> Quadratic Bezier
+            out.push('Q' + l.slice(1));
+            var n = l.slice(1).trim().split(/\s+/).map(Number);
+            if(n.length>=4) last = [n[2], n[3]];
+          }else if(c==='K' || c==='C'){ // circular arc through 3 points
+            var n2 = l.slice(1).trim().split(/\s+/).map(Number);
+            if(!last || n2.length<4){ continue; }
+            var A = last;
+            var B = [n2[0], n2[1]];
+            var Cpt = [n2[2], n2[3]];
+            var arc = _geoArcFrom3Points(A,B,Cpt);
+            if(!arc){
+              out.push('L ' + Cpt[0] + ' ' + Cpt[1]);
+            }else{
+              out.push('A ' + arc.r + ' ' + arc.r + ' 0 0 ' + arc.sweep + ' ' + arc.end[0] + ' ' + arc.end[1]);
+            }
+            last = Cpt;
+          }else if(c==='Z' || c==='z'){
+            out.push('Z');
+          }else{
+            // pass-through raw SVG path commands (Q,C,A,H,V,...)
+            out.push(l);
+            if(c==='Q'){
+              var n3 = l.slice(1).trim().split(/\s+/).map(Number);
+              if(n3.length>=4) last = [n3[2], n3[3]];
+            }else if(c==='C'){
+              var n4 = l.slice(1).trim().split(/\s+/).map(Number);
+              if(n4.length>=6) last = [n4[4], n4[5]];
+            }else if(c==='A'){
+              var n5 = l.slice(1).trim().split(/\s+/).map(Number);
+              if(n5.length>=7) last = [n5[5], n5[6]];
+            }
+          }
+        }
+
+        p.setAttribute('d', out.join('\n'));
+        p.removeAttribute('data-d'); // avoid re-processing
+      }catch(_){}
+    }
+
+    // also ensure defs in standalone svgs that want patterns
+    try{
+      var svgs = (root.querySelectorAll ? root.querySelectorAll('svg') : []);
+      for(var k=0;k<svgs.length;k++) _geoEnsureDefs(svgs[k]);
+    }catch(_){}
+  }
+
+  // expose
+  window.applyGeometry = applyGeometry;
+})();
+
+
+function preserveLeadingSpaces(content) {
+            return content.replace(/^\s+/gm, (spaces) => {
+                return spaces.replace(/ /g, '&nbsp;');
+            });
+        }
+
+        
+function convertToStructuredQuestions(raw) {
+  const questions0 = { one: [], two: [], three: [], four: [] };
+
+  for (const [type, list] of Object.entries(raw)) {
+    if (type === 'three') {
+  questions0.three = list.map(line => {
+    const rawLine = line.trim();
+    const mark = (rawLine[0] === '!' || rawLine[0] === '?') ? rawLine[0] : '';
+    const cleaned = mark ? rawLine.slice(1).trim() : rawLine;
+    const match = cleaned.match(/(.+?)\s*@(.+?)@$/);
+    if (!match) return null;
+    return { Q: (mark ? mark : '') + match[1].trim(), A: match[2].trim() };
+  }).filter(Boolean);
+
+    } else if (type === 'four') {
+      questions0.four = list.map(q => ({ Q: q.trim() }));
+    } else {
+      questions0[type] = list.map(entry => {
+        if (!Array.isArray(entry)) return null;
+        const [Q, ...rest] = entry.map(e => e.trim());
+        return { Q, A: rest };
+      }).filter(Boolean);
+    }
+  }
+
+  return questions0;
+}
+
+// moved into script.onload
+
+function shuffleAndFormatQuestions(original) {
+  const letters = ['A', 'B', 'C', 'D', 'E'];
+  const result = { one: [], two: [], three: [], four: [] };
+
+  for (const type of ['one', 'two']) {
+    const grouped = {};
+    const groupOrder = [];
+
+    for (const q of original[type] || []) {
+      let rawQ = typeof q.Q === 'string' ? q.Q.trim() : '';
+      let groupId = -1;
+      let fixedPosition = 'middle';
+
+      const groupMatch = rawQ.match(/@!?(\d+)(\?)?@/);
+      if (groupMatch) {
+        groupId = parseInt(groupMatch[1]);
+        rawQ = rawQ.replace(/@!?(\d+)\??@/, '').trim();
+      }
+
+      if (!grouped[groupId]) {
+        grouped[groupId] = {
+          questions: [],
+          fixedPosition: 'middle',
+          groupId
+        };
+        groupOrder.push(groupId);
+
+        if (groupTexts[groupId]?.startsWith('!')) grouped[groupId].fixedPosition = 'start';
+        else if (groupTexts[groupId]?.startsWith('?')) grouped[groupId].fixedPosition = 'end';
+      }
+
+      const isFixedTop = rawQ.startsWith('!');
+      const isFixedBottom = rawQ.startsWith('?');
+      if (isFixedTop || isFixedBottom) rawQ = rawQ.slice(1).trim();
+
+      grouped[groupId].questions.push({
+        rawQ,
+        A: q.A,
+        fixedTop: isFixedTop,
+        fixedBottom: isFixedBottom,
+        groupId
+      });
+    }
+
+    const startGroups = groupOrder.filter(id => grouped[id].fixedPosition === 'start');
+    const middleGroups = groupOrder.filter(id => grouped[id].fixedPosition === 'middle');
+    const endGroups = groupOrder.filter(id => grouped[id].fixedPosition === 'end');
+
+    for (let i = middleGroups.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [middleGroups[i], middleGroups[j]] = [middleGroups[j], middleGroups[i]];
+    }
+
+    const finalOrder = [...startGroups, ...middleGroups, ...endGroups];
+
+    for (const gid of finalOrder) {
+      const group = grouped[gid];
+      let questions = group.questions;
+
+      const top = questions.filter(q => q.fixedTop);
+      const bottom = questions.filter(q => q.fixedBottom && !q.fixedTop);
+      let middle = questions.filter(q => !q.fixedTop && !q.fixedBottom);
+
+      for (let i = middle.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [middle[i], middle[j]] = [middle[j], middle[i]];
+      }
+
+      const allQuestions = [...top, ...middle, ...bottom];
+
+      for (const q of allQuestions) {
+        const groupText = groupTexts[q.groupId];
+        let finalQ = groupText
+          ? `<div class="reading-box">${md.render(window.markToSpan(groupText.replace(/^!/, '').replace(/^\?/, '').trim()))}</div>\n\n` + q.rawQ
+          : q.rawQ;
+
+        const parsedAnswers = q.A.map(a => {
+          const isCorrect = a.trim().endsWith('@');
+          const isFixedTop = a.trim().startsWith('!');
+          const isFixedBottom = a.trim().startsWith('?');
+          const clean = a.replace(/^!/, '')
+                         .replace(/^\?/, '')
+                         .replace(/@$/, '')
+                         .trim();
+          return { text: clean, correct: isCorrect, fixedTop: isFixedTop, fixedBottom: isFixedBottom };
+        });
+
+        const topA = parsedAnswers.filter(p => p.fixedTop);
+        const bottomA = parsedAnswers.filter(p => p.fixedBottom);
+        let middleA = parsedAnswers.filter(p => !p.fixedTop && !p.fixedBottom);
+
+        for (let i = middleA.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [middleA[i], middleA[j]] = [middleA[j], middleA[i]];
+        }
+
+        const finalAnswers = [...topA, ...middleA, ...bottomA];
+        const correctLetters = finalAnswers.map((p, i) => p.correct ? letters[i] : null).filter(x => x !== null);
+
+        const blockType = type === 'two' ? '.M' : '.S';
+        let block = `::: ${blockType}\n`;
+        finalAnswers.forEach(p => {
+          block += `0. ${p.text}\n`;
+        });
+        block += ':::\n';
+
+        result[type].push({
+          Q: `${finalQ}\n${block}`,
+          A: type === 'two' ? correctLetters.map(l => l.toLowerCase()) : correctLetters[0]
+        });
+      }
+    }
+  }
+
+    // Xử lý phần .three (câu tự luận)
+  const parsedThree = (original.three || []).map(q => {
+  let raw = typeof q.Q === 'string' ? q.Q.trim() : '';
+  const isFixedTop = raw.startsWith('!');
+  const isFixedBottom = raw.startsWith('?');
+  if (isFixedTop || isFixedBottom) raw = raw.slice(1).trim();
+  return { Q: raw, A: q.A, fixedTop: isFixedTop, fixedBottom: isFixedBottom };
+});
+
+
+  const topThree = parsedThree.filter(q => q.fixedTop);
+  const bottomThree = parsedThree.filter(q => q.fixedBottom);
+  let middleThree = parsedThree.filter(q => !q.fixedTop && !q.fixedBottom);
+
+  for (let i = middleThree.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [middleThree[i], middleThree[j]] = [middleThree[j], middleThree[i]];
+  }
+
+  result.three = [...topThree, ...middleThree, ...bottomThree].map(q => ({ Q: q.Q, A: q.A }));
+
+  result.four = [...(original.four || [])];
+  return result;
+}
+
+
+
+
+function readFileAsDataURL(file) {
+  return new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(reader.result);
+    reader.readAsDataURL(file);
+  });
+}
+
+// Gán và làm sạch định dạng
+
+// moved into script.onload
+
+function cleanAnswers(questions) {
+  for (const section in questions) {
+    questions[section].forEach(q => {
+      if (typeof q.Q === 'string') {
+        // Xóa ! hoặc !? khỏi dòng đáp án
+        q.Q = q.Q.replace(/0\.\s*!+\s*/g, '0. ');
+      }
+    });
+  }
+}
+
+
+	
+
+
+   
+
+window.addEventListener('load', (event) => {
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) { // Kiểm tra cả typesetPromise
+        typesetMathIn(document.getElementById('questionText')).then(()=>typesetMathIn(document.getElementById('optionsText')))
+            .then(() => console.log("MathJax initial rendering completed."))
+            .catch(err => console.error("MathJax initial typesetting error:", err));
+    } else {
+        console.error("MathJax not loaded.");
+    }
+});
+   let isFourQuestionSelected = false;
+let fourQuestionIndex =0; // Index câu hỏi đã chọn của phần four
+let score = 0; // Điểm của người dùng, giả định được tính từ các phần khác
+ 
+const form = document.forms["BT"];
+    const fileInput = document.getElementById("media");
+    
+
+
+
+
+
+// === PATCH: Mobile only allow 1 file (stability) ===
+const __isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+try{
+  if(__isMobile){
+    // optional: make picker clearly single-file on mobile
+    fileInput.removeAttribute('multiple');
+  }
+}catch(_){}
+fileInput.addEventListener('change', () => {
+  try{
+    if(__isMobile && fileInput.files && fileInput.files.length > 1){
+      alert("Điện thoại: chỉ nộp 1 file (1 ảnh hoặc 1 PDF).");
+      fileInput.value = "";
+      try{ renderFileList(); }catch(e){}
+      return;
+    }
+  }catch(_){}
+});
+
+// ===== File list UI (Part 4) =====
+const fileListDiv = document.getElementById("fileList");
+
+function renderFileList() {
+  if (!fileListDiv) return;
+
+  if (!fileInput.files || fileInput.files.length === 0) {
+    fileListDiv.innerHTML = "";
+    return;
+  }
+
+  let html = `<div class="fileListTitle">📎</div>`;
+  Array.from(fileInput.files).forEach(f => {
+    html += `<div class="fileItem">${f.name}</div>`;
+  });
+  fileListDiv.innerHTML = html;
+}
+
+
+
+// ✅ Backward-compatible alias (some code may call updateFileListUI)
+function updateFileListUI() { 
+  try { renderFileList(); } catch(e) {}
+}
+fileInput.addEventListener("change", renderFileList);
+// ===== Show selected file names (Part 4 upload) =====
+const submitButton = document.getElementById("submit-button");
+
+// ===== SUBMITTED MODE helper (hide toàn bộ UI làm bài) =====
+function setSubmittedUI(){
+  try { document.documentElement.classList.add('submitted'); } catch(e){}
+  try { document.body.classList.add('submitted'); } catch(e){}
+  const idsToHide = ['quizContainer','questionContainer','tab','quickNavButtons','timer','fileList','dateDisplay','submit-button','custom','media','username'];
+  idsToHide.forEach(id=>{
+    const el = document.getElementById(id);
+    if(el) el.style.display='none';
+  });
+  // sidebar might be class-based
+  document.querySelectorAll('.sidebar').forEach(el=>{ el.style.display='none'; });
+}
+
+// === SUBMIT OVERLAY helpers (cover question while uploading) ===
+function showSubmitOverlay(msg, scoreLine){
+  try{
+    const ov = document.getElementById('submitOverlay');
+    const tx = document.getElementById('submitOverlayText');
+    const sc = document.getElementById('submitOverlayScore');
+
+    if(tx) tx.textContent = msg || '⏳ Đang nộp bài…';
+    if(sc) sc.textContent = scoreLine || '';
+
+    // Cover ONLY the question area (questionContainer) so the header can stay visible
+    const qc = document.getElementById('questionContainer');
+    if(ov && qc){
+      const r = qc.getBoundingClientRect();
+      ov.style.top = r.top + 'px';
+      ov.style.left = r.left + 'px';
+      ov.style.width = r.width + 'px';
+      ov.style.height = r.height + 'px';
+      ov.style.display = 'flex';
+    }else if(ov){
+      // fallback: cover full screen
+      ov.style.top = '0';
+      ov.style.left = '0';
+      ov.style.width = '100%';
+      ov.style.height = '100%';
+      ov.style.display = 'flex';
+    }
+  }catch(_){}
+}
+function hideSubmitOverlay(){
+  try{
+    const ov = document.getElementById('submitOverlay');
+    if(ov) ov.style.display = 'none';
+  }catch(_){}
+}
+
+let __submittedOnce = false;
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+
+  
+  // === PATCH: prevent double submit ===
+  if(__submittedOnce) return;
+  __submittedOnce = true;
+
+  // Cover question area while submitting (do not hide UI yet)
+  showSubmitOverlay('⏳ Đang nộp bài…');
+
+// Dừng timer (nếu còn)
+  if (typeof quizTimer !== 'undefined') {
+    clearInterval(quizTimer);
+  }
+  // === PATCH: Mobile-safe ===
+  // Do NOT hide the UI before upload finishes (mobile browsers may pause/kill background tasks).
+  // We will hide UI after submitForm() completes.
+
+  // Tính điểm và ghi vào ô score để gửi lên Google Sheet
+  const totalScore = calculateScore();
+
+  const usernameInput = document.getElementById('username');
+  const name = usernameInput ? usernameInput.value : '';
+  const scoreInput = document.getElementById('score');
+  scoreInput.value = 100 * (fourQuestionIndex + 1) + totalScore;
+
+  
+  // Update overlay header with score (still blocking question while uploading)
+  showSubmitOverlay('⏳ Đang nộp bài…', `Bạn ${name} đạt: ${totalScore}`);
+
+  // Chuẩn bị dữ liệu gửi lên Apps Script
+  const formData = new FormData(form);
+  console.log("🚀 Submit handler running, FormData entries:", Array.from(formData.entries()));
+  const files = Array.from(fileInput.files);
+  const extensions = files.map(f => f.name.split('.').pop().toLowerCase());
+
+  const isAllImages = extensions.every(ext => ['jpg', 'png'].includes(ext));
+  const isAllPDFs = extensions.every(ext => ext === 'pdf');
+
+  const maxTotalSize = 16 * 1024 * 1024; // 16MB
+  const totalSize = files.reduce((acc, f) => acc + f.size, 0);
+  if (totalSize > maxTotalSize) {
+    alert("Tổng dung lượng vượt quá 16MB.");
+    try{ __submittedOnce = false; }catch(_){}
+    try{ hideSubmitOverlay(); }catch(_){}
+    return;
+  }
+
+  // === PATCH: Mobile (1 image) -> send raw image (no jsPDF, more reliable)
+  try{
+    if (typeof __isMobile !== 'undefined' && __isMobile && isAllImages && files.length === 1) {
+      const f0 = files[0];
+      const readerImg = new FileReader();
+      readerImg.onloadend = async function () {
+        try{
+          const dataUrl = readerImg.result || '';
+          const base64 = String(dataUrl).split(',')[1] || '';
+          const ext = (f0.name.split('.').pop() || '').toLowerCase();
+          formData.append("media", base64);
+          formData.append("fileExtension", (ext === 'png') ? 'png' : 'jpg');
+          await submitForm(formData);
+        }catch(err){
+          alert("Lỗi xử lý ảnh trên điện thoại: " + (err && err.message ? err.message : err));
+          try{ __submittedOnce = false; }catch(_){}
+          try{ hideSubmitOverlay(); }catch(_){}
+        }
+      };
+      readerImg.readAsDataURL(f0);
+      return;
+    }
+  }catch(_){}
+
+  if (isAllImages && files.length > 0) {
+    try{
+      const { jsPDF } = window.jspdf;
+      let pdf;
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      const imgData = await readFileAsDataURL(file);
+      const img = new Image();
+      img.src = imgData;
+
+      await new Promise(resolve => {
+        img.onload = () => {
+          const width = img.width;
+          const height = img.height;
+
+          if (i === 0) {
+            pdf = new jsPDF({
+              orientation: width > height ? "landscape" : "portrait",
+              unit: "px",
+              format: [width, height]
+            });
+          } else {
+            pdf.addPage([width, height], width > height ? "landscape" : "portrait");
+          }
+
+          const format = file.type === 'image/png' ? 'PNG' : 'JPEG';
+          pdf.addImage(img, format, 0, 0, width, height);
+          resolve();
+        };
+      });
+    }
+
+    const pdfBlob = pdf.output('blob');
+    const readerPDF = new FileReader();
+    readerPDF.onloadend = async function () {
+      formData.append("media", readerPDF.result.split(",")[1]);
+      formData.append("fileExtension", "pdf");
+      await submitForm(formData);
+    };
+    readerPDF.readAsDataURL(pdfBlob);
+    return;
+    }catch(err){
+      // Fallback: if jsPDF fails (common on mobile/low-memory), send first image raw
+      try{
+        const f0 = files[0];
+        const readerImg = new FileReader();
+        readerImg.onloadend = async function () {
+          try{
+            const dataUrl = readerImg.result || '';
+            const base64 = String(dataUrl).split(',')[1] || '';
+            const ext = (f0.name.split('.').pop() || '').toLowerCase();
+            formData.append("media", base64);
+            formData.append("fileExtension", (ext === 'png') ? 'png' : 'jpg');
+            await submitForm(formData);
+          }catch(e2){
+            alert("Lỗi xử lý ảnh: " + (e2 && e2.message ? e2.message : e2));
+            try{ __submittedOnce = false; }catch(_){}
+            try{ hideSubmitOverlay(); }catch(_){}
+          }
+        };
+        readerImg.readAsDataURL(f0);
+        return;
+      }catch(_e){
+        alert("Không thể tạo PDF từ ảnh.");
+        try{ __submittedOnce = false; }catch(_){}
+        try{ hideSubmitOverlay(); }catch(_){}
+        return;
+      }
+    }
+  }
+
+  if (isAllPDFs && files.length === 1) {
+    const reader = new FileReader();
+    reader.onloadend = async function () {
+      formData.append("media", reader.result.split(",")[1]);
+      formData.append("fileExtension", "pdf");
+      await submitForm(formData);
+    };
+    reader.readAsDataURL(files[0]);
+    return;
+  }
+
+  if (files.length === 0) {
+    await submitForm(formData);
+    return;
+  }
+
+  alert("Chỉ chấp nhận nhiều ảnh JPG/PNG hoặc 1 file PDF.");
+  try{ __submittedOnce = false; }catch(_){}
+  try{ hideSubmitOverlay(); }catch(_){}
+});
+
+async function submitForm(formData) {
+  submitButton.disabled = true;
+  submitButton.innerText = "Loading...";
+
+  fetch(scriptURL, { method: "POST", body: formData })
+    .then(async (response) => {
+      const text = await response.text();
+      let message = text;
+
+      try {
+        const data = JSON.parse(text);
+message = data.message || data.reason || text;
+      } catch (e) {
+        // Not JSON, keep original text
+      }
+
+      const box = document.getElementById('responseBox');
+      box.style.display = 'block';
+
+      if (response.ok) {
+        submitButton.innerText = "Đã gửi";
+        submitButton.classList.remove("btn-primary");
+        submitButton.classList.add("btn-success");
+        box.style.color = 'green';
+      } else {
+        box.style.color = 'red';
+        try{ __submittedOnce = false; }catch(_){ }
+      }
+
+      box.innerText = message;
+    })
+    .catch((error) => {
+      const box = document.getElementById('responseBox');
+      box.style.display = 'block';
+      box.style.color = 'red';
+      box.innerText = `Lỗi khi gửi: ${error.message}`;
+      try{ __submittedOnce = false; }catch(_){ }
+    })
+    .finally(() => {
+      submitButton.disabled = false;
+      // Hide UI only after network finishes
+            // Hide submit overlay
+      try{ hideSubmitOverlay(); }catch(_){ }
+
+try{ setSubmittedUI(); }catch(_){ }
+    });
+}
+ 
+
+
+
+
+const fullscreen =  document.getElementById('questionContainer');
+   
+ 
+    function formatDateTime(date) {
+      // Fail-soft: avoid crashing if date is null/undefined/invalid
+      if (!(date instanceof Date) || isNaN(date.getTime())) return '';
+      const dd = String(date.getDate()).padStart(2, '0');
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const yyyy = date.getFullYear();
+      const HH = String(date.getHours()).padStart(2, '0');
+      const MI = String(date.getMinutes()).padStart(2, '0');
+      const SS = String(date.getSeconds()).padStart(2, '0');
+      return `${dd}-${mm}-${yyyy} ${HH}:${MI}:${SS}`;
+    }
+
+
+        // Hàm kiểm tra thời gian hiện tại và cập nhật tiêu đề + hiển thị div
+        function setLockedUI(isLocked){
+  const root = document.documentElement;
+  try{
+    if(isLocked) root.classList.add('locked');
+    else root.classList.remove('locked');
+  }catch(_){}
+
+  // Hide/Show main UI when locked (outside allowed time)
+  const ids = [
+    'invertBtn','timer','tab','quizContainer','questionContainer',
+    'quickNavButtons','custom','media','fileList','questionForm','submit-button'
+  ];
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    if(!el) return;
+    el.style.display = isLocked ? 'none' : '';
+  });
+
+  // Hide sidebar by class
+  try{
+    document.querySelectorAll('.sidebar').forEach(el=>{
+      el.style.display = isLocked ? 'none' : '';
+    });
+  }catch(_){}
+
+  // Username input: only show inside time
+  const usernameEl = document.getElementById('username');
+  if(usernameEl) usernameEl.style.display = isLocked ? 'none' : 'block';
+
+  // Optional: hide loading overlay if any
+  const ov = document.getElementById('loadingOverlay');
+  if(ov && isLocked) ov.style.display = 'none';
+}
+
+function checkDisplayDate() {
+  const now = new Date();
+
+  const usernameEl = document.getElementById('username');
+  const dateEl = document.getElementById('dateDisplay');
+  if (!usernameEl || !dateEl) return;
+
+  // If config dates aren't ready, lock UI and show a gentle message
+  if (!(startDate instanceof Date) || isNaN(startDate.getTime()) ||
+      !(endDate instanceof Date) || isNaN(endDate.getTime())) {
+    setLockedUI(true);
+    dateEl.innerHTML = '⏳ Đang tải cấu hình thời gian…';
+    return;
+  }
+
+  const inTime = (now >= startDate && now <= endDate);
+
+  if (inTime) {
+    setLockedUI(false);
+    dateEl.innerHTML = '';
+  } else {
+    setLockedUI(true);
+    dateEl.innerHTML =
+      `🕒 <b>${formatDateTime(startDate)}</b> &#128277; <b>${formatDateTime(endDate)}</b>`;
+  }
+}
+
+// (NOTE) Do not bind window.onload here; page already uses window.onload for config loader.  
+let currentQuestion = 0;
+let currentGroupId = null;
+let currentReadingHTML = '';
+let currentSection = '';
+let quizTimer;
+let isAutoSubmit = false;  // đánh dấu lần nộp là tự động hay không
+
+const selectedArray = { one: [], two: [], three: [] };
+const savedStatus = { one: [], two: [], three: [] };
+
+function switchSection(section) {
+    currentSection = section;
+
+    if (section === 'four') {
+        if (!isFourQuestionSelected) {
+            // Chọn ngẫu nhiên một câu hỏi từ phần four nếu chưa chọn
+            fourQuestionIndex = Math.floor(Math.random() * questions.four.length);
+            isFourQuestionSelected = true; // Đánh dấu đã chọn câu hỏi
+        }
+
+        // Hiển thị câu hỏi của phần four và phần tải lên file
+ const questionText = questions.four[fourQuestionIndex].Q;
+ document.getElementById('questionText').innerHTML = md.render(window.markToSpan(preserveLeadingSpaces(questionText)));
+
+try{ if(window.applyGeometry) window.applyGeometry(document.getElementById('questionText')); }catch(_){};
+renderSVGById(null);
+try{ if(window.applyGeometry) window.applyGeometry(document.getElementById('questionText')||document.body); }catch(_){ }
+if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+  typesetMathIn(document.getElementById('questionText')).then(()=>typesetMathIn(document.getElementById('optionsText')))
+    .then(() => console.log("✅ MathJax render done"))
+    .catch(err => console.error("❌ MathJax error:", err));
+}
+
+
+    
+
+        document.getElementById('custom').style.display = 'block'; // Hiển thị phần tải lên file
+        const fl = document.getElementById('fileList');
+        if (fl) { fl.style.display = 'block'; }
+        try { renderFileList(); } catch(e) {}
+document.getElementById('fileList').style.display = 'block';
+updateFileListUI();
+document.getElementById('questionForm').style.display = 'none';
+document.getElementById('quickNavButtons').style.display = 'none';
+    } else {document.getElementById('questionForm').style.display = 'flex';
+document.getElementById('quickNavButtons').style.removeProperty('display');
+        // Ẩn phần tải lên file ở các phần khác
+        document.getElementById('custom').style.display = 'none';
+        const fl2 = document.getElementById('fileList');
+        if (fl2) { fl2.style.display = 'none'; }
+const __fl = document.getElementById('fileList'); if (__fl) __fl.style.display = 'none';
+        currentQuestion = 0;
+        showQuestion();  // Hiển thị câu hỏi của phần khác ngoài phần four
+    }
+}
+
+
+
+      function startTimer() {
+    const now = Date.now();
+    const hardEnd = (endDate instanceof Date && !isNaN(endDate.getTime())) ? endDate.getTime() : (Date.now() + quizDuration);       // Mốc kết thúc tuyệt đối (vd: 9:30)
+          // 15 phút = 900000 ms
+
+    // Nếu học sinh vào trễ, giới hạn endTime không được vượt quá hardEnd
+    const endTime = Math.min(now + quizDuration, hardEnd);
+
+    quizTimer = setInterval(() => {
+        const timeLeft = Math.floor((endTime - Date.now()) / 1000);
+
+        if (timeLeft <= 0) {
+            const submitBtn = document.getElementById("submit-button");
+            if (submitBtn) submitBtn.click();
+            clearInterval(quizTimer);
+        } else {
+            const minutes = Math.floor(timeLeft / 60);
+            const seconds = timeLeft % 60;
+            document.getElementById('timer').textContent =
+                `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+        }
+    }, 1000);
+}
+
+
+        
+
+        function shuffle(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+        }
+
+function showQuestion() {const qData = questions[currentSection][currentQuestion];
+const groupMatch = qData?.Q.match(/@groupId:(\d+)/);
+const groupId = groupMatch ? parseInt(groupMatch[1]) : null;
+
+if (groupId !== null && groupTexts[groupId]) {
+    let readingText = groupTexts[groupId];
+    if (readingText.startsWith('!')) readingText = readingText.slice(1).trim();
+    document.getElementById("reading").innerHTML = md.render(window.markToSpan(readingText));
+
+try{ if(window.applyGeometry) window.applyGeometry(document.getElementById('reading')); }catch(_){};
+if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+  typesetMathIn(document.getElementById('questionText')).then(()=>typesetMathIn(document.getElementById('optionsText')))
+    .then(() => console.log("✅ MathJax render done"))
+    .catch(err => console.error("❌ MathJax error:", err));
+}
+
+
+    document.getElementById("reading").style.display = "block";
+} else {
+    document.getElementById("reading").innerHTML = '';
+    document.getElementById("reading").style.display = "none";
+}
+
+
+
+   
+
+
+    const questionText = questions[currentSection][currentQuestion]?.Q || " ";
+const cleanQ0 = questionText.replace(/@groupId:\d+@/, '').trim();
+
+// Extract [svg:id] after prefixes (! ? @n@)
+const ex = extractSvgTag(cleanQ0);
+const cleanQ = ex.text;
+
+// Render full question into #questionText (keep old ::: .S / ::: .M structure)
+// If this question has SVG, move the options block (.S/.M) into #optionsText
+function moveOptionsBlockIfAny(){
+  const qEl = document.getElementById('questionText');
+  const oEl = document.getElementById('optionsText');
+  if(!qEl || !oEl) return;
+  const block = qEl.querySelector('.S, .M');
+  if(block){
+    oEl.innerHTML = '';
+    oEl.appendChild(block);
+    oEl.style.display = '';
+  } else {
+    oEl.innerHTML = '';
+    oEl.style.display = 'none';
+  }
+}
+
+// Always render full content first
+document.getElementById('questionText').innerHTML = md.render(window.markToSpan(preserveLeadingSpaces(cleanQ)));
+
+// When there is SVG, we split layout by moving only the option block to #optionsText
+if(ex.svgId){
+  document.documentElement.classList.add('hasSvg');
+  moveOptionsBlockIfAny();
+} else {
+  document.documentElement.classList.remove('hasSvg');
+  // Keep options inside questionText as in the original file
+  const optsEl = document.getElementById('optionsText');
+  if(optsEl){ optsEl.innerHTML = ''; optsEl.style.display = 'none'; }
+}
+// Auto show/hide SVG panel for this question
+renderSVGById(ex.svgId);
+
+    if (typeof MathJax !== 'undefined' && MathJax.typesetPromise) {
+        /* no clear */
+        typesetMathIn(document.getElementById('questionText')).then(()=>typesetMathIn(document.getElementById('optionsText')))
+            .then(() => {
+                console.log("✅ MathJax render xong");
+                if (['one', 'two'].includes(currentSection)) {
+                    adjustLayoutByFontAndScreenSize();
+                } // Gọi sau khi MathJax xử lý xong
+            })
+            .catch(err => console.error("❌ MathJax error:", err));
+    }
+
+    let formContent = '';
+
+    if (currentSection === 'one') {
+        formContent += `
+            <div class="radio-group">
+                <label class="radio-container"><input type="radio" name="option" value="A" onclick="toggleRadio(this)" onchange="toggleCheckboxes(false)"><div class="radio-box">A</div></label>
+                <label class="radio-container"><input type="radio" name="option" value="B" onclick="toggleRadio(this)" onchange="toggleCheckboxes(false)"><div class="radio-box">B</div></label>
+                <label class="radio-container"><input type="radio" name="option" value="C" onclick="toggleRadio(this)" onchange="toggleCheckboxes(false)"><div class="radio-box">C</div></label>
+                <label class="radio-container"><input type="radio" name="option" value="D" onclick="toggleRadio(this)" onchange="toggleCheckboxes(false)"><div class="radio-box">D</div></label>
+            </div>
+            <span class="error" id="answerError" style="display: none;">Đáp án.</span>`;
+    } else if (currentSection === 'two') {
+        formContent += `
+            <div class="checkbox-group">
+                <label class="checkbox-container"><input type="checkbox" name="option" value="a" onchange="uncheckRadio()"><div class="checkbox-box">a</div></label>
+                <label class="checkbox-container"><input type="checkbox" name="option" value="b" onchange="uncheckRadio()"><div class="checkbox-box">b</div></label>
+                <label class="checkbox-container"><input type="checkbox" name="option" value="c" onchange="uncheckRadio()"><div class="checkbox-box">c</div></label>
+                <label class="checkbox-container"><input type="checkbox" name="option" value="d" onchange="uncheckRadio()"><div class="checkbox-box">d</div></label>
+                <br>
+                <label class="radio-container"><input type="radio" name="toggle" value="none" onmousedown="handleMouseDown(this)" onclick="handleClick(this)"><div class="radio-box"></div></label>
+            </div>
+            <span class="error" id="answerError" style="display: none;"> Đáp án.</span>`;
+    } else {
+        formContent = `
+            <div class="input-container" id="input-wrapper">
+                <input type="text" class="input-box" maxlength="1" oninput="moveToNext(this, 1)" onfocus="clearInput(this)">
+                <input type="text" class="input-box" maxlength="1" oninput="moveToNext(this, 2)" onfocus="clearInput(this)">
+                <input type="text" class="input-box" maxlength="1" oninput="moveToNext(this, 3)" onfocus="clearInput(this)">
+                <input type="text" class="input-box" maxlength="1" oninput="moveToNext(this, 4)" onfocus="clearInput(this)">
+            </div>
+            <input type="hidden" id="answerInput">
+            <span class="error" id="answerError" style="display: none;">Đáp số</span>
+            <div id="result" style="margin-top: 10px; font-weight: bold; display: none;"></div>`;
+    }
+
+    document.getElementById('questionForm').innerHTML = formContent;
+    // ✅ Khôi phục đáp án đã lưu khi quay lại câu
+    restoreUISelection();
+    showQuickNavButtons();
+
+// ===== Restore selected answers when revisiting a question =====
+function restoreUISelection() {
+    const saved = (selectedArray[currentSection] || [])[currentQuestion];
+
+    if (currentSection === 'one') {
+        if (typeof saved === 'string' && saved) {
+            const r = document.querySelector(`input[name="option"][value="${saved}"]`);
+            if (r) r.checked = true;
+        }
+    }
+
+    else if (currentSection === 'two') {
+        if (Array.isArray(saved) && saved.length > 0) {
+            // Clear all first to avoid stale UI
+            document.querySelectorAll('input[name="option"]').forEach(el => el.checked = false);
+            const noneRadio = document.querySelector('input[type="radio"][value="none"]');
+            if (noneRadio) noneRadio.checked = false;
+
+            if (saved.includes('none')) {
+                if (noneRadio) noneRadio.checked = true;
+            } else {
+                saved.forEach(v => {
+                    const cb = document.querySelector(`input[name="option"][value="${v}"]`);
+                    if (cb) cb.checked = true;
+                });
+            }
+        }
+    }
+
+    else if (currentSection === 'three') {
+        if (typeof saved === 'string' && saved.trim() !== '') {
+            const val = saved.trim();
+            const inputs = document.querySelectorAll('.input-box');
+            inputs.forEach((inp, i) => inp.value = (val[i] || ''));
+            const hidden = document.getElementById('answerInput');
+            if (hidden) hidden.value = val;
+        }
+    }
+}
+
+}
+function clearCheckboxes() {
+    const checkboxes = document.querySelectorAll('input[name="option"]');
+    checkboxes.forEach(checkbox => checkbox.checked = false);
+}
+ function toggleCheckboxes(state) {
+            // Tìm tất cả các radio buttons với name là 'option'
+            const radios = document.querySelectorAll('input[name="option"]');
+            radios.forEach(radio => {
+                if (radio.checked) {
+                    console.log(`Radio button "${radio.value}" đã được chọn.`);
+                }
+            });
+        }
+
+function uncheckRadio() {
+    const radio = document.querySelector('input[type="radio"][value="none"]');
+    if (radio) radio.checked = false;
+}
+
+  function moveToNext(current, nextIndex) {
+    const validChars = /[0-9\.\-]/;
+    const value = current.value;
+
+    if (value.length === 1 && validChars.test(value)) {
+      const nextInput = document.querySelectorAll('.input-box')[nextIndex];
+      if (nextInput) nextInput.focus();
+    } else {
+      current.value = ''; // Xóa nếu nhập sai ký tự
+    }
+    getResult(); // Cập nhật mỗi khi nhập
+  }
+
+  function clearInput(input) {
+    input.value = '';
+  }
+
+  function getResult() {
+  const inputs = document.querySelectorAll('.input-box');
+  let result = '';
+  let firstEmpty = false;
+
+  for (let i = 0; i < inputs.length; i++) {
+    const char = inputs[i].value;
+
+    if (char === '') {
+      firstEmpty = true;
+    } else {
+      if (firstEmpty) {
+        document.getElementById('answerError').innerText = 'Đáp số';
+        document.getElementById('answerInput').value = '';
+        return;
+      }
+      result += char;
+    }
+  }
+
+  // Dấu '-' chỉ được ở đầu
+  if (result.includes('-') && result[0] !== '-') {
+    document.getElementById('answerInput').value = '';
+    return;
+  }
+
+  // Dấu '.' không ở đầu/cuối và chỉ có 1 lần
+  const dotCount = (result.match(/\./g) || []).length;
+  if (result.startsWith('.') || result.endsWith('.')) {
+   
+    document.getElementById('answerInput').value = '';
+    return;
+  }
+  if (dotCount > 1) {
+        document.getElementById('answerInput').value = '';
+    return;
+  }
+
+  // Kiểm tra hợp lệ:
+  // - Định dạng đúng số: nguyên/thập phân
+  // - Không bắt đầu bằng 0 nếu không phải 0.x
+  if (
+    !/^[-]?(\d+(\.\d+)?|\.\d+)$/.test(result) ||   // kiểm tra định dạng hợp lệ
+    /^[-]?0\d+/.test(result)                      // loại số bắt đầu bằng 0 mà không phải 0.
+  ) {
+   
+    document.getElementById('answerInput').value = '';
+  } else {
+    document.getElementById('answerInput').value = result;
+  }
+
+  // Cập nhật trạng thái saved cho phần 3 khi người dùng xóa hết
+  if (currentSection === 'three') {
+    const answerInput = document.getElementById('answerInput');
+    const value = answerInput ? answerInput.value.trim() : '';
+    if (value === '' && savedStatus['three'][currentQuestion]) {
+      savedStatus['three'][currentQuestion] = false;
+      selectedArray['three'][currentQuestion] = undefined;
+      showQuickNavButtons();
+    }
+  }
+
+}
+
+
+function saveSelection() {
+    let isSaved = false;
+    const message = document.getElementById('answerError');
+
+    const wasSaved = savedStatus[currentSection][currentQuestion] === true;
+
+    if (currentSection === 'one') {
+        const selectedOption = document.querySelector('input[name="option"]:checked');
+
+        if (selectedOption) {
+            selectedArray['one'][currentQuestion] = selectedOption.value;
+            savedStatus['one'][currentQuestion] = true;
+            isSaved = true;
+        } else if (wasSaved) {
+            // Chỉ reset nếu trước đó đã lưu, giờ lại bỏ chọn
+            selectedArray['one'][currentQuestion] = undefined;
+            savedStatus['one'][currentQuestion] = false;
+            showQuickNavButtons();
+            showQuestion();
+            return;
+        }
+    }
+
+    else if (currentSection === 'two') {
+        const selectedOptions = [...document.querySelectorAll('input[name="option"]:checked')];
+        const radioSelected = document.querySelector('input[type="radio"][value="none"]:checked');
+
+        if (selectedOptions.length > 0 || radioSelected) {
+            const values = radioSelected ? ['none'] : selectedOptions.map(input => input.value);
+            selectedArray['two'][currentQuestion] = values;
+            savedStatus['two'][currentQuestion] = true;
+            isSaved = true;
+        } else if (wasSaved) {
+            selectedArray['two'][currentQuestion] = undefined;
+            savedStatus['two'][currentQuestion] = false;
+            showQuickNavButtons();
+            showQuestion();
+            return;
+        }
+    }
+
+    else if (currentSection === 'three') {
+        const answerInput = document.getElementById('answerInput');
+        const answerValue = answerInput.value.trim();
+
+        if (answerValue === '') {
+            if (wasSaved) {
+                selectedArray['three'][currentQuestion] = undefined;
+                savedStatus['three'][currentQuestion] = false;
+                showQuickNavButtons();
+                showQuestion();
+            }
+            return;
+        }
+
+        if (/^[-]?\d{1,4}(\.\d{1,2})?$/.test(answerValue)) {
+            selectedArray['three'][currentQuestion] = answerValue;
+            savedStatus['three'][currentQuestion] = true;
+            isSaved = true;
+        } else {
+            selectedArray['three'][currentQuestion] = undefined;
+            savedStatus['three'][currentQuestion] = false;
+            message.style.display = 'block';
+            // Cập nhật lại màu các nút 01,02,... vì câu này không còn đáp án hợp lệ
+            showQuickNavButtons();
+            return;
+        }
+    }
+
+    if (isSaved) {
+        message.style.display = 'none';
+        showQuickNavButtons();
+    }
+}
+
+       function showQuickNavButtons(isVertical = true) {
+    const quickNavButtonsDiv = document.getElementById('quickNavButtons');
+    quickNavButtonsDiv.innerHTML = '';  // Clear existing buttons
+
+    // Xóa các class điều chỉnh trước
+    quickNavButtonsDiv.classList.remove('vertical', 'horizontal');
+
+    // Thêm class dựa trên kiểu hiển thị (dọc hay ngang)
+    if (isVertical) {
+        quickNavButtonsDiv.classList.add('vertical');  // Thêm class cho hiển thị dọc
+    } else {
+        quickNavButtonsDiv.classList.add('horizontal');  // Thêm class cho hiển thị ngang
+    }
+
+    for (let i = 0; i < questions[currentSection].length; i++) {
+        const button = document.createElement('button');
+        button.innerText = `${(i + 1).toString().padStart(2, '0')}`;
+
+        if (savedStatus[currentSection][i]) {
+            button.classList.add('saved');  // Apply the 'saved' class
+        }
+
+        if (i === currentQuestion) {
+            button.disabled = true;
+            button.classList.add('current');
+        }
+
+       button.addEventListener('click', () => {
+    // ✅ Lưu đáp án câu hiện tại trước khi chuyển câu (tránh mất đáp án)
+    try { saveSelection(); } catch (e) {}
+
+    // ✅ Chỉ chuyển câu, KHÔNG tự xóa đáp án khi bấm nút 01,02,...
+    currentQuestion = i;
+    showQuestion();
+});
+quickNavButtonsDiv.appendChild(button);
+    }
+}
+
+
+     
+
+
+    let mark = 1;
+
+function calculatePartOneScore(userAnswers) {
+    let score = 0;
+    questions.one.forEach((q, index) => {
+        const correctAnswer = q.A;  // Correct answer
+        if (userAnswers[index] !== undefined && userAnswers[index] === correctAnswer) {
+            score += mark/2;
+        }
+    });
+    return score;
+}
+const userAnswers = [];
+
+document.querySelectorAll('.question').forEach(questionDiv => {
+ const index = parseInt(questionDiv.dataset.index);
+
+ questionDiv.addEventListener('change', () => {
+const selected = Array.from(
+ questionDiv.querySelectorAll('input[type="checkbox"]:checked')
+).map(input => input.value);
+
+ userAnswers[index] = selected.length > 0 ? selected : []; // ✅ Cập nhật mảng rõ ràng
+
+ console.log(`Câu ${index}: Cập nhật ->`, userAnswers[index]);
+});
+});
+
+function calculatePartTwoScore(userAnswers = []) {
+    let totalScore = 0;
+
+    questions.two.forEach((q, index) => {
+            if (!userAnswers[index]) return;
+const correctAnswer = q.A || [];  // Correct answer
+        const userAnswer = userAnswers[index] || [];  // User's answer
+        let point = 0;  // Initialize points
+
+        // Check if 'none' (radio button) is selected
+        const isRadioSelected = userAnswer.includes('none');
+        const hasCheckboxSelection = userAnswer.length > 0 && !isRadioSelected;
+
+        // Skip if neither radio nor checkbox options are selected
+        if (!isRadioSelected && !hasCheckboxSelection) {
+            console.log(`Câu ${index + 1}: Không có lựa chọn nào -> Bỏ qua câu hỏi.`);
+            return;
+        }
+
+        if (isRadioSelected) {
+            console.log(`Câu ${index + 1}: Chọn 'none' -> Tính điểm với checkbox trống.`);
+            const totalCorrect = correctAnswer.length;
+            const totalSelected = 0; // No checkbox selected
+            point = 2 * 0 + 4 - (totalCorrect + totalSelected); // Apply formula
+        } else {
+            // Calculate points based on selected checkboxes
+            const matchingAnswers = userAnswer.filter(option => correctAnswer.includes(option)).length;
+            const totalCorrect = correctAnswer.length;
+            const totalSelected = userAnswer.length;
+
+            // Scoring formula
+            point = 2 * matchingAnswers + 4 - (totalCorrect + totalSelected);
+
+            console.log(`Câu ${index + 1}: Matching = ${matchingAnswers}, Điểm = ${point}`);
+        }
+
+
+        // Convert points to {0.25, 0.5, 1, 2}
+        let questionScore;
+        if (point === 1) questionScore = mark/4;
+        else if (point === 2) questionScore = mark/2;
+        else if (point === 3) questionScore = 1*mark;
+        else if (point === 4) questionScore = 2*mark;
+        else questionScore = 0;  // Default to 0
+
+        console.log(`Câu ${index + 1}: Điểm cuối cùng = ${questionScore}`);
+
+        // Add to total score
+        totalScore += questionScore;
+    });
+
+    return totalScore;
+}
+
+
+
+
+
+ 
+
+
+// Function to calculate Part Three score
+function calculatePartThreeScore(userAnswers) {
+    let score = 0;
+    questions.three.forEach((q, index) => {
+        const correctAnswer = q.A;  // Correct answer
+        if (userAnswers[index] !== undefined && userAnswers[index] === correctAnswer) {
+            score += mark;
+        }
+    });
+    return score;
+}
+
+
+// Function to calculate total score
+function calculateScore() {
+    const partOneScore = calculatePartOneScore(selectedArray.one);
+    const partTwoScore = calculatePartTwoScore(selectedArray.two);
+    const partThreeScore = calculatePartThreeScore(selectedArray.three);
+
+    const totalScore = partOneScore + partTwoScore + partThreeScore;
+   
+            return totalScore;
+}
+
+        const usernameInput = document.getElementById('username');
+
+let waitingForValidInput = true;
+
+
+// Khi người dùng nhập xong và click ra ngoài input (blur), ta kiểm tra lại
+usernameInput.addEventListener('blur', () => {
+    if (!waitingForValidInput) return;
+
+    // ===== TIME GATE: ngoài giờ thì không cho bắt đầu =====
+    try{
+      const now = new Date();
+      if (!(now >= startDate && now <= endDate)) {
+        try{ checkDisplayDate(); }catch(_){}
+        // ngoài giờ: không giữ focus ở ô mã
+        return;
+      }
+    }catch(_){}
+
+    // Trong giờ: giữ focus để học sinh nhập đúng TT#
+    try{ usernameInput.focus(); }catch(_){}
+
+    const nameValue = usernameInput.value.trim();
+    const pattern = /^[0-4G][0-9V]#$/;
+
+    if (nameValue === '' || !pattern.test(nameValue)) {
+        // Sai định dạng vẫn không làm gì
+        return;
+    }
+
+    // Khi nhập đúng thì reset trạng thái và bắt đầu quiz
+    waitingForValidInput = false;
+    startQuiz();
+});
+
+
+function startQuiz() {
+    // Chỉ cho bắt đầu khi đã tải xong config + câu hỏi
+    if (!window.quizConfigLoaded) {
+        alert("Hệ thống đang tải cấu hình và câu hỏi. Vui lòng đợi vài giây rồi thử lại.");
+        return;
+    }
+
+    const nameValue = usernameInput.value.trim();
+    document.getElementById('tab').classList.remove('hidden'); // Hiện nút chọn phần
+
+    // Chọn sẵn 1 câu tự luận cho phần four (dù học sinh có qua phần four hay không)
+    if (questions.four && questions.four.length > 0) {
+        fourQuestionIndex = Math.floor(Math.random() * questions.four.length);
+        isFourQuestionSelected = true;
+    }
+
+    startTimer();       // Bắt đầu đếm giờ
+     // Trộn câu hỏi phần one và two
+
+    // ❌ KHÔNG gán currentSection
+    // ❌ KHÔNG gọi showQuestion()
+    // → Người dùng tự chọn phần bằng các nút tròn
+}
+
+   document.getElementById('questionForm').addEventListener('click', function(e){
+    const wrapper = document.getElementById('input-wrapper');
+    if (wrapper && wrapper.contains(e.target)) {
+        if (currentSection === 'three') {
+            getResult();
+            const answerInput = document.getElementById('answerInput');
+            const value = answerInput ? answerInput.value.trim() : '';
+            if (value !== "") {
+                saveSelection();
+            }
+        }
+        return;
+    }
+    saveSelection();
+});
+     
+
+
+
+  
+  
+
+
+// === PATCH: removed duplicate submit-button click handler (it could cause double submit on desktop) ===
+
+function adjustLayoutByFontAndScreenSize() {
+    const container = document.querySelector('#optionsText .M, #optionsText .S, #questionText .M, #questionText .S');
+
+    if (!container) return; 
+
+    container.style.position = 'relative';
+    const items = container.querySelectorAll('li');
+    if (items.length === 0) return;
+
+    const containerWidth = container.clientWidth;
+    const fontSize = parseFloat(window.getComputedStyle(items[0]).fontSize);
+
+    let maxLengthInPixels = 0;
+    items.forEach(item => {
+        const contentLength = item.textContent.trim().length;
+        const estimatedPixelLength = contentLength * (fontSize * 0.6);
+        if (estimatedPixelLength > maxLengthInPixels) {
+            maxLengthInPixels = estimatedPixelLength;
+        }
+    });
+
+    items.forEach(item => {
+        item.style.position = '';
+        item.style.left = '';
+        item.style.top = '';
+        item.style.width = '';
+        item.style.display = 'inline-block';
+        item.style.marginBottom = '';
+    });
+
+    let columnCount = 1;
+    if (maxLengthInPixels <= containerWidth * 0.25 - 60) {
+        columnCount = 4;
+    } else if (maxLengthInPixels <= containerWidth * 0.5 - 60) {
+        columnCount = 2;
+    }
+
+    if (columnCount === 1) {
+        let topOffset = 0;
+        items.forEach(item => {
+            item.style.position = 'absolute';
+            item.style.left = '0px';
+            item.style.width = `${containerWidth}px`;
+            item.style.top = `${topOffset}px`;
+
+            const height = item.offsetHeight || item.scrollHeight;
+            topOffset += height + 10;
+        });
+        container.style.height = `${topOffset}px`;
+    } else {
+        const colWidthPx = containerWidth / columnCount;
+        const colHeights = new Array(columnCount).fill(0);
+
+        items.forEach((item, index) => {
+            const col = index % columnCount;
+            item.style.position = 'absolute';
+            item.style.left = `${col * colWidthPx}px`;
+            item.style.width = `${colWidthPx}px`;
+            item.style.top = `${colHeights[col]}px`;
+
+            const height = item.offsetHeight || item.scrollHeight;
+            colHeights[col] += height + 10;
+        });
+
+        container.style.height = `${Math.max(...colHeights)}px`;
+    }
+}
+
+let lastClickedRadio = null;
+let preventNextClick = false;
+
+function handleMouseDown(radio) {
+  // Nếu radio đã được chọn trước đó, chuẩn bị hủy chọn
+  if (radio === lastClickedRadio) {
+    preventNextClick = true;
+  } else {
+    preventNextClick = false;
+  }
+}
+
+function handleClick(radio) {
+  if (preventNextClick) {
+    radio.checked = false;
+    lastClickedRadio = null;
+  } else {
+    lastClickedRadio = radio;
+    clearCheckboxes(); // Xóa checkbox nếu cần
+  }
+}
+let lastSelectedRadio = null;
+
+function toggleRadio(radio) {
+  if (lastSelectedRadio === radio) {
+    radio.checked = false;
+    lastSelectedRadio = null;
+  } else {
+    lastSelectedRadio = radio;
+  }
+}
+document.addEventListener('focusout', (e) => {
+  const inputs = document.querySelectorAll('.input-box');
+  if (!inputs.length) return;
+
+  const wrapper = document.getElementById("input-wrapper");
+  if (!wrapper.contains(e.target)) return;
+
+  const allFilled = Array.from(inputs).every(i => i.value.trim() !== '');
+  if (allFilled) {
+    getResult();
+  }
+});
+
+window.addEventListener('resize', adjustLayoutByFontAndScreenSize);
+
+
+document.addEventListener('focusout', (e) => {
+  const inputs = document.querySelectorAll('.input-box');
+  if (!inputs.length) return;
+
+  const wrapper = document.getElementById("input-wrapper");
+  if (!wrapper || !wrapper.contains(e.target)) return;
+
+  const allFilled = Array.from(inputs).every(i => i.value.trim() !== '');
+  if (allFilled) {
+    getResult();
+  }
+});
+
+</script>
+<script>
+(function limitReloadsPerDay() {
+  const maxAccess = 5; // Số lần được phép reload mỗi ngày
+  const key = "quiz_daily_access";
+  const today = new Date().toLocaleDateString("vi-VN");
+
+  let accessData = JSON.parse(localStorage.getItem(key)) || { date: today, count: 0 };
+
+  if (accessData.date === today) {
+    accessData.count++;
+  } else {
+    accessData = { date: today, count: 1 };
+  }
+
+  localStorage.setItem(key, JSON.stringify(accessData));
+
+  if (accessData.count > maxAccess) {
+    document.body.innerHTML = `
+      <div style="padding: 40px; font-size: 1.5em; color: rgb(128,128,128); text-align: center;">
+        Bạn đã vượt quá số lần truy cập cho phép hôm nay (${maxAccess} lần). Vui lòng quay lại vào ngày mai.
+      </div>`;
+  } else {
+    console.log("Lượt truy cập hôm nay:", accessData.count);
+  }
+})();
+
+window.addEventListener("beforeunload", function (e) {
+  e.preventDefault();
+  e.returnValue = "Bạn có chắc muốn tải lại trang? Mỗi ngày chỉ được phép truy cập tối đa 5 lần.";
+});
+</script>
+<!-- === SUBMIT OVERLAY: cover QUESTION area while uploading (mobile-safe) === -->
+<div id="submitOverlay" style="display:none;">
+  <div id="submitOverlayInner">
+    <div id="submitOverlayScore" aria-live="polite"></div>
+    <div class="loadingBox" id="submitOverlayText">⏳ Đang nộp bài…</div>
+  </div>
+</div>
+
+<style>
+#submitOverlay{
+      background:#808080;
+
+  position:fixed;
+  top:0; left:0;
+  width:100%; height:100%;
+  z-index: 999998;
+  display:none;
+  align-items:center;
+  justify-content:center;
+  pointer-events:auto;
+}
+#submitOverlayInner{
+      background:#808080;
+
+  display:flex;
+  flex-direction:column;
+  align-items:center;
+  justify-content:center;
+  gap:12px;
+  padding: 0 10px;
+}
+#submitOverlayScore{
+      background:#808080;
+
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-align:center;
+  line-height: 1.35;
+}
+#submitOverlay .loadingBox{
+  
+  font-size: 1.4rem;
+  padding: 18px 24px;
+  border-radius: 12px;
+}
+#submit-button{ display:none !important; }
+
+</style>
+
+<!-- ✅ Modified: Show Google Script response in styled box -->
+<div id="responseBox" style="display:none; padding: 40px; font-size: 1.5em; color: green; text-align: center;"></div>
+<style>
+      .input-container {
+      display: flex;
+      gap: 10px;
+    }
+    .input-box {
+      width: 40px;
+      height: 40px;
+      text-align: center;
+      font-size: 24px;
+      border: 2px solid #ccc;
+      border-radius: 5px;
+      font-family: monospace;
+    }
+    .input-box:focus {
+      border-color: #808080;
+    }
+    #result {
+      margin-top: 20px;
+      font-weight: bold;
+    }
+  
+ .custom-file-upload {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #000;
+    font-size: 26px;
+    cursor: pointer;
+    margin-left: 8px;
+}
+
+
+        /* Hiển thị tên file đã chọn */
+        #custom {
+        display: none;
+    }
+
+        /* Ẩn input file */
+        #media {
+            display: none;
+        }
+  
+.form-container {
+    display: flex;
+    align-items: center;
+    gap: 10px; /* Khoảng cách giữa các form */
+} 
+ ol {
+            width: 100%;
+            list-style-type: none;
+            padding: 0;
+            margin: 0;
+            display: flex;
+            flex-wrap: wrap;
+            box-sizing: border-box;
+            position: relative;
+        }
+   li { 
+            counter-increment: custom-counter;
+            padding: 0;
+            margin: 0;
+            box-sizing: border-box;
+         line-height:1.5;
+        }
+        /* Chèn thứ tự trước mỗi mục li */
+        .M li::before { 
+            content: counter(custom-counter, lower-alpha) ") ";
+            font-weight: bold;
+        }
+.S li::before { 
+            content: counter(custom-counter, upper-alpha) ". ";
+            font-weight: bold;
+        }
+
+
+
+
+      
+
+   
+     
+        body, html {
+            margin: 10;
+            padding: 10;
+            height: 100%;
+            width: 100%;
+            overflow: auto;
+            display: flex;
+            font-size: 100%
+        }
+ input {
+      
+    
+      font-size: 150%; /* Kích thước chữ */
+    }
+label,
+.error {
+  display: inline-block; /* Đảm bảo các thành phần nằm trên cùng một hàng */
+ font-size: 100%;
+}
+
+
+.error {
+  color: red; /* Tùy chỉnh màu lỗi */
+}
+ 
+    body {
+      font-family: Arial, sans-serif;
+      padding: 20px;
+    }
+
+    .checkbox-group {
+      display: flex;
+      gap: 15px;
+    }
+
+    .checkbox-container {
+      position: relative;
+      width: 40px;
+      height: 40px;
+    }
+
+    /* Hidden default checkbox */
+    .checkbox-container input[type="checkbox"] {
+      opacity: 0;
+      position: absolute;
+      cursor: pointer;
+    }
+
+    /* Custom checkbox */
+    .checkbox-box {
+      width: 100%;
+      height: 100%;
+      border: 2px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: #000;
+      transition: 0.3s ease;
+      background-color: #fff;
+    }
+
+    /* Change background and color when checked */
+    .checkbox-container input[type="checkbox"]:checked ~ .checkbox-box {
+      background-color: #808080;
+      color: #fff;
+      border-color: #808080;
+    }
+
+    
+
+    .radio-group {
+      display: flex;
+      gap: 15px;
+    }
+
+    .radio-container {
+      position: relative;
+      width: 40px;
+      height: 40px;
+    }
+
+    /* Hidden default radio button */
+    .radio-container input[type="radio"] {
+      opacity: 0;
+      position: absolute;
+      cursor: pointer;
+    }
+
+    /* Custom radio button */
+    .radio-box {
+      width: 100%;
+      height: 100%;
+      border: 2px solid #000;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      font-weight: bold;
+      color: #000;
+       /* Make it circular */
+      transition: 0.3s ease;
+      background-color: #fff;
+    }
+
+    /* Change background and color when checked */
+    .radio-container input[type="radio"]:checked ~ .radio-box {
+      background-color: #808080;
+      color: #fff;
+      border-color: #808080;
+    }
+ 
+
+        /* Tăng kích thước checkbox */
+        input[type="radio"] {
+            transform: scale(1.5); /* Phóng to checkbox */
+        }
+        .error {
+            color: red;
+            display: none;
+        }
+        .hidden {
+    display: none !important;
+}
+        .saved {
+            background-color:#808080;
+            color: #fff;
+            border-color:#808080;
+        }
+
+
+        #timer {
+            font-size: 1.5rem;
+            
+            margin-bottom: 10px;
+        }
+input[type="checkbox"] {
+    /* Ẩn giao diện mặc định của checkbox */
+    appearance: none;
+    -webkit-appearance: none;
+    -moz-appearance: none;
+    width: 20px;
+    height: 20px;
+    border: 2px solid #000;
+    cursor: pointer;
+    position: relative;
+}
+
+input[type="checkbox"]:checked::before {
+    content: "x";
+    font-size: 18px;
+    color: black;
+    position: absolute;
+    top: -3px;
+    left: 3px;
+}
+
+
+ 
+#quickNavButtons {
+    display: flex;
+    flex-wrap: wrap;
+    position: fixed;  /* Cố định vị trí để luôn nằm ở bên phải hoặc dưới cùng */
+    margin: 0px;
+ gap: 5px;/* Khoảng cách giữa các nút */
+}
+#quickNavButtons button {
+    width: 32px;  /* Điều chỉnh kích thước button */
+    height: 32px;
+    margin: 0px;
+    border-radius: 25%;
+
+}
+/* Khi màn hình ngang (landscape) */
+@media (orientation: landscape) {
+ #quickNavButtons {
+    position: fixed;
+    top: 120px;
+    left: 30px;               /* ⚠️ phải có px */
+    
+    display: grid;
+    grid-auto-flow: column;   /* điền theo cột */
+    grid-template-rows: repeat(4, 1fr); /* 8 hàng cố định */
+
+    height: 160px;            /* 8 hàng × 30px */
+    width: 80px;             /* đủ cho 2 cột nhìn rõ */
+
+    gap: 2px;
+
+    overflow-x: auto;         /* ✅ trượt NGANG */
+    overflow-y: hidden;       /* ❌ không trượt dọc */
+    
+    scrollbar-width: thin;    /* Firefox */
+}
+    
+#questionText{
+            width: 80%; /* Chiều rộng 40% cho mỗi div */
+   height:100vh;
+   
+            position: absolute;
+           font-size:120%;
+ 
+            margin: 0 auto;
+        }
+.form-container {
+    display: flex;
+flex-direction: row;
+}
+}
+
+/* Khi màn hình dọc (portrait) */
+@media (orientation: portrait) {
+ #quickNavButtons {
+    position: fixed;
+    top: 30px;          /* ⚠️ phải có px */
+    left: 160px;        /* ⚠️ phải có px */
+
+    display: grid;
+    grid-auto-flow: row;                 /* điền theo hàng */
+    grid-template-columns: repeat(4, 1fr); /* 8 nút / hàng */
+
+    width: 160px;       /* đủ cho 8 nút nhỏ */
+    max-height: 80px;   /* chiều cao hiển thị 1 hàng */
+
+    gap: 2px;           /* ⚠️ bạn gõ nhầm 4Fpx */
+
+    overflow-y: auto;   /* ✅ TRƯỢT DỌC */
+    overflow-x: hidden; /* ❌ không trượt ngang */
+}
+
+#questionText{
+            height: 80%; /* Chiều rộng 40% cho mỗi div */
+      width:100%;
+    flex-wrap: wrap;
+  
+            position: absolute;
+           font-size:120%;
+ 
+            margin: 0 auto;
+        }
+
+
+
+.form-container {
+    display: flex;
+flex-direction: column;}
+}
+      .content {
+            line-height: 1.6;
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        /* Định dạng cho tất cả hình ảnh trong content */
+        .content img {
+            max-width: 100%;
+            height: auto;
+            margin: 10px; /* Khoảng cách mặc định xung quanh hình ảnh */
+        }
+
+        /* Bố cục mặc định cho chế độ ngang */
+        @media (orientation: landscape) {
+            .T {
+                display: flex; /* Hiển thị nội dung theo hàng */
+                align-items: flex-start; /* Căn trên cùng */
+                gap: 10px; /* Khoảng cách giữa chữ và hình ảnh */
+            }
+
+            .T img {
+                float: left; /* Quấn chữ xung quanh hình */
+                margin: 0 10px 10px 0; /* Khoảng cách giữa hình và văn bản */
+                max-width: 50%; /* Giới hạn chiều rộng của hình ảnh */
+            }
+        }
+
+        /* Bố cục cho chế độ dọc */
+        @media (orientation: portrait) {
+            .T {
+                display: block; /* Hiển thị nội dung theo cột */
+            }
+
+            .T img {
+                display: block; /* Hình ảnh nằm một dòng riêng */
+                margin: 20px auto 0; /* Căn giữa hình ảnh */
+                max-width: 80%; /* Điều chỉnh kích thước phù hợp với chiều dọc */
+            }
+        }
+  
+
+.contain {
+    display: flex;
+    flex-direction: row; /* Mặc định là ngang */
+}
+
+@media (orientation: portrait) {
+    .contain {
+        flex-direction: column; /* Khi dọc thì thành cột */
+    }
+}
+
+.container {
+        display: flex;
+        gap: 5px;
+        justify-content: left;
+        align-items: top;
+        flex-wrap: wrap;
+    }
+    .boxs {
+        white-space: nowrap;
+        padding: 1px ;
+       
+        text-align: center;
+    }
+
+    /* Mặc định xếp ngang */
+    @media (orientation: landscape) {
+        .container {
+            flex-direction: column;
+        }
+    }
+
+    /* Khi quay dọc xếp theo cột */
+    @media (orientation: portrait) {
+        .container {
+            flex-direction: row;
+        }
+    }
+        body {
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            display: flex;
+            
+            color: white;
+            align-items: flex-start;
+        }
+
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(2, 40px);
+            gap: 5px;
+        }
+
+        .buttons button {
+            width: 40px;
+            height: 40px;
+            background: #555;
+            border: none;
+            color: white;
+            cursor: pointer;
+border-radius:25%;
+
+
+        }
+
+        .extra-divs {
+            display: flex;
+            gap: 5px;
+            margin-left: 1px;
+        }
+
+        .box {
+            background: lightblue;
+            padding: 10px;
+            border: 1px solid black;
+            text-align: center;
+            min-width: 15px;
+min-height:15px;
+        }
+
+        @media (orientation: portrait) {
+            .sidebar {   
+                flex-direction: row;
+                width: 100%;
+                height: 100px;
+            }
+
+            .extra-divs {
+                flex-direction: column;
+            }
+        }
+
+        @media (orientation: landscape) {
+            body {
+                flex-direction: row;
+            }
+
+            .sidebar {   
+                flex-direction: column;
+
+                width: 100px;
+                height: 100vh;
+            }
+
+            .extra-divs {
+                flex-direction: row;
+                flex-wrap: wrap;
+                margin-top: 1px;
+            }
+        }
+
+.reading-box {
+ display: block;
+  max-height: 40vh;
+  overflow: auto;
+  
+  padding: 10px;
+  margin-bottom: 2px;
+  border-left: 2px ;
+  border-radius: 2px;
+  font-size: 0.95em;
+  line-height: 1.4em;
+  white-space: pre-line;
+
+}
+
+/* ===== Scoped shape rules by section ===== */
+
+/* Hide native UI */
+input[type="checkbox"],
+input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+}
+
+/* --- Section ONE (radio-group): radios are circular --- */
+.radio-group .radio-box {
+  border: 2px solid #000;
+  
+  background-color: #fff;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #000;
+  transition: 0.3s ease;
+}
+.radio-group .radio-container input[type="radio"]:checked ~ .radio-box {
+  background-color: #808080;
+  color: #fff;
+  border-color: #808080;
+}
+
+/* --- Section TWO (checkbox-group): checkboxes circular, radio square --- */
+.checkbox-group .checkbox-box {
+  border: 2px solid #000;
+  border-radius: 50%;
+  background-color: #fff;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #000;
+  transition: 0.3s ease;
+}
+.checkbox-group .checkbox-container input[type="checkbox"]:checked ~ .checkbox-box {
+  background-color: #808080;
+  color: #fff;
+  border-color: #808080;
+}
+
+.checkbox-group .radio-box {
+  border: 2px solid #000;
+  
+  background-color: #fff;
+  width: 40px;
+  height: 40px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #000;
+  transition: 0.3s ease;
+  margin-left: 8px;
+}
+.checkbox-group .radio-container input[type="radio"]:checked ~ .radio-box {
+  background-color: #808080;
+  color: #fff;
+  border-color: #808080;
+}
+
+
+/* --- Final3 adjustments --- */
+/* Make the radio 'none' smaller (~50%) */
+.checkbox-group .radio-container .radio-box {
+  transform: scale(0.5);
+  transform-origin: center center;
+}
+
+
+/* --- Final4 adjustments: ensure part 1 radios circular --- */
+.radio-group .radio-box {
+  border: 2px solid #000 !important;
+  border-radius: 50% !important;
+  background-color: #fff;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: bold;
+  color: #000;
+  transition: 0.3s ease;
+}
+.radio-group .radio-container input[type="radio"]:checked ~ .radio-box {
+  background-color: #808080;
+  color: #fff;
+  border-color: #808080;
+}
+
+
+
+/* ===== File list (Part 4) in nav area ===== */
+.file-list-nav{
+  margin-top: 4px;
+  font-size: 0.8rem;
+  max-width: 160px;
+  max-height: 140px;
+  overflow: auto;              /* ✅ dùng scroll giống nav */
+  word-break: break-word;
+  line-height: 1.35;
+  opacity: 0.95;
+}
+.file-list-nav .fileListTitle{
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+.file-list-nav .fileItem{
+  padding: 2px 4px;
+  border-radius: 4px;
+  background: #808080;
+  color: #fff;
+  margin-bottom: 2px;
+}
+/* ✅ Double-invert to display correctly in inverted mode */
+
+
+/* ===== SUBMITTED MODE: ẩn toàn bộ UI làm bài, chỉ hiện kết quả ===== */
+html.submitted body, body.submitted{
+  overflow: hidden !important;
+}
+
+body.submitted #quizContainer,
+body.submitted #questionContainer,
+body.submitted #tab,
+body.submitted #quickNavButtons,
+body.submitted #timer,
+body.submitted #dateDisplay,
+body.submitted #username,
+body.submitted #submit-button,
+body.submitted #fileList,
+body.submitted #custom,
+body.submitted #media,
+body.submitted .sidebar,
+body.submitted .radio-container,
+body.submitted .checkbox-container{
+  display: none !important;
+}
+
+body.submitted #responseBox{
+  display: block !important;
+}
+
+</style>
+
+<script>
+(function() {
+    // Số lần chuyển tab cho phép, có thể cấu hình từ Google Sheet (config.maxTabSwitches)
+    if (typeof window.maxTabSwitches === 'undefined') {
+        window.maxTabSwitches = 3; // mặc định
+    }
+    let tabSwitchCount = 0;
+
+    function handleVisibilityChange() {
+        if (document.hidden) {
+            tabSwitchCount++;
+            if (tabSwitchCount > window.maxTabSwitches) {
+                // Quá số lần cho phép → tự động nộp bài
+                const submitBtn = document.getElementById("submit-button"); if (submitBtn) submitBtn.click();
+            }
+        }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+})();
+</script>
+
+<script>
+(function() {
+    // Số lần chuyển tab cho phép, có thể cấu hình từ Google Sheet (config.maxTabSwitches)
+    if (typeof window.maxTabSwitches === 'undefined') {
+        window.maxTabSwitches = 3; // mặc định
+    }
+    let tabSwitchCount = 0;
+
+    function handleVisibilityChange() {
+        if (document.hidden) {
+            tabSwitchCount++;
+            if (tabSwitchCount > window.maxTabSwitches) {
+                // Quá số lần cho phép → tự động nộp bài
+                const submitBtn = document.getElementById("submit-button"); if (submitBtn) submitBtn.click();
+            }
+        }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+})();
+</script>
+
+  <script>
+    
+    // Chuẩn hóa dữ liệu config từ Apps Script (có thể là object hoặc mảng)
+    function normalizeConfig(data) {
+      const out = {};
+      if (!data) return out;
+
+      // Trường hợp trả về dạng mảng [[key,value], ...]
+      if (Array.isArray(data)) {
+        for (const row of data) {
+          if (Array.isArray(row) && row.length >= 2) {
+            const key = String(row[0]).trim();
+            const value = row[1];
+            out[key] = value;
+          }
+        }
+        return out;
+      }
+
+      // Trường hợp trả về object { key: value, ... }
+      for (const k in data) {
+        if (!Object.prototype.hasOwnProperty.call(data, k)) continue;
+        const key = String(k).trim();
+        out[key] = data[k];
+      }
+      return out;
+    }
+// 🟩 Script chính: tải config + dữ liệu câu hỏi
+    function getURLParam(name) {
+      return new URLSearchParams(window.location.search).get(name);
+    }
+
+    const scriptURL = getURLParam("script") || "https://script.google.com/macros/s/AKfycbwM1YbVN-4WCs2MJa4X8sTIqlYQrPnY5J_I8hZn_Sc34rPpoasirY7frdBelkDyhgV2/exec";
+    const fileToLoad = getURLParam("file") || "questions.js";
+
+    // Biến toàn cục
+let questions0 = {};
+let questions = {};
+
+    let rawData = {};
+    let groupTexts = [];
+    let startDate = null;
+    let endDate = null;
+    let quizDuration = 300000; // mặc định 5 phút
+
+    // Cờ đánh dấu đã tải xong config + câu hỏi
+    window.quizConfigLoaded = false;
+
+    
+async function loadConfigAndQuestions() {
+      try {
+        const configRes = await fetch(`${scriptURL}?action=config`);
+        let config = await configRes.json();
+        config = normalizeConfig(config);
+
+        // Lấy startDate, endDate, quizDuration từ config (tên cột: startDate, endDate, quizDuration)
+        const rawStart = config.startDate || config.StartDate;
+        const rawEnd   = config.endDate   || config.EndDate;
+        const rawDur   = config.quizDuration || config.QuizDuration || config.duration || config.Duration;
+
+        if (!rawStart || !rawEnd) {
+          console.warn("⚠️ Config thiếu startDate hoặc endDate, dùng mặc định.");
+        }
+
+        startDate = rawStart ? new Date(rawStart) : new Date();
+        endDate   = rawEnd   ? new Date(rawEnd)   : new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+        let durMinutes = parseFloat(rawDur);
+        if (Number.isNaN(durMinutes) || !durMinutes || durMinutes <= 0) {
+          console.warn("⚠️ Config thiếu quizDuration hợp lệ, dùng mặc định 5 phút.");
+          durMinutes = 5;
+        }
+        // Dùng đúng giá trị quizDuration (phút) từ config, không trừ/ cộng thêm buffer
+        quizDuration = durMinutes * 60 * 1000;
+
+        // Nếu config có giới hạn số lần chuyển tab thì dùng, ngược lại giữ mặc định
+        if (typeof config.maxTabSwitches !== 'undefined' || typeof config.MaxTabSwitches !== 'undefined') {
+          const rawMaxSwitch = config.maxTabSwitches || config.MaxTabSwitches;
+          const maxSwitch = parseInt(rawMaxSwitch);
+          if (!Number.isNaN(maxSwitch) && maxSwitch > 0) {
+            window.maxTabSwitches = maxSwitch;
+          }
+        }
+
+        console.log("✅ Config đã tải & chuẩn hóa:", {
+          startDate,
+          endDate,
+          quizMinutes: durMinutes,
+          quizDuration,
+          maxTabSwitches: window.maxTabSwitches,
+          raw: config
+        });
+
+        // Cập nhật hiển thị thời gian cho phép làm bài
+        if (typeof checkDisplayDate === 'function') {
+          checkDisplayDate();
+        }
+
+        const script = document.createElement("script");
+        script.src = fileToLoad;
+
+        script.onload = function () {
+          try {
+            rawData    = window.rawData || {};
+            groupTexts = window.groupTexts || [];
+            questions0 = convertToStructuredQuestions(rawData);
+            questions  = shuffleAndFormatQuestions(questions0);
+            cleanAnswers(questions);
+            console.log("✅ Dữ liệu đã load xong");
+            // Đánh dấu đã sẵn sàng bắt đầu bài kiểm tra
+            window.quizConfigLoaded = true;
+            // ✅ UI chỉ hiện sau khi tải xong config + câu hỏi
+            document.body.classList.remove('loading');
+            const __ov = document.getElementById('loadingOverlay');
+            if (__ov) __ov.style.display = 'none';
+
+            // ===== TIME GATE: show ONLY time notice outside allowed window =====
+            try{ checkDisplayDate(); }catch(_){}
+            try{ setInterval(checkDisplayDate, 30000); }catch(_){}
+
+          } catch (err) {
+            console.error("❌ Lỗi khi xử lý dữ liệu câu hỏi:", err);
+          }
+        };
+
+        script.onerror = () => {
+          alert("❌ Không thể tải file câu hỏi: " + fileToLoad);
+        };
+
+        document.head.appendChild(script);
+      } catch (err) {
+        alert("❌ Lỗi khi tải config: " + err);
+      }
+    }
+
+    // Gọi load khi trang sẵn sàng
+    window.onload = loadConfigAndQuestions;
+  </script>
+
+
+<button id="invertBtn">&#9728;</button>
+
+<script>
+  const invertBtn = document.getElementById("invertBtn");
+  let inverted = false;
+
+  invertBtn.addEventListener("click", () => {
+    inverted = !inverted;
+    document.documentElement.classList.toggle("inverted", inverted);
+invertBtn.innerHTML = inverted ? "&#10036;" : "&#9728;";
+    invertBtn.classList.toggle("inverted", inverted);
+  });
+</script>
+<script>
+let lastTapTime = 0;
+const DOUBLE_TAP_DELAY = 300;
+
+// ---------- TOUCH (DOUBLE TAP) ----------
+document.addEventListener("touchend", (e) => {
+  const now = Date.now();
+  if (now - lastTapTime < DOUBLE_TAP_DELAY) {
+    toggleFullscreen();
+    lastTapTime = 0;
+  } else {
+    lastTapTime = now;
+  }
+}, { passive: true });
+
+// ---------- MOUSE (DOUBLE CLICK) ----------
+document.addEventListener("dblclick", (e) => {
+  toggleFullscreen();
+});
+
+// ---------- KEYBOARD (GIỮ CÁI CŨ RẤT TỐT) ----------
+document.addEventListener("keydown", (e) => {
+  if (e.shiftKey && e.code === "Space") {
+    e.preventDefault();
+    toggleFullscreen();
+  }
+});
+
+// ---------- FULLSCREEN CORE ----------
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+function enterFullscreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) elem.requestFullscreen();
+  else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+  else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+}
+</script>
+
+</body>
+</html>

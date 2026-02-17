@@ -1,0 +1,440 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>gifpp_list.html</title>
+  <script src="gifler.min.js"></script>
+  <style>
+    body{margin:0;background:#000;color:#fff;font-family:system-ui,Segoe UI,Arial;display:flex;align-items:center;justify-content:center;flex-direction:column}
+    html, body {margin: 0; padding: 0; width: 100%; height: 100%;}
+    #gifBox, #gifCanvas {width: 100%; height: 100%; display: block;}
+    canvas{background:#000;display:block;border:none;border-radius:12px;cursor:pointer;transition:border-color .3s}
+    #dlgOverlay{position:fixed;inset:0;background:rgba(0,0,0,.45);display:none;align-items:center;justify-content:center;z-index:2147483646}
+    #dlgCard{background:#111;color:#fff;width:90vw;height:90vh;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.35);padding:0;display:flex;flex-direction:column;overflow:auto}
+    #dlgContent{flex:1;display:flex;align-items:stretch;justify-content:stretch}
+    #dlgContent iframe,#dlgContent object{width:100%;height:100%;border:0;background:#fff;overflow:auto}
+    #dlgContent img,#dlgContent video{width:100%;height:100%;object-fit:contain;display:block}
+  
+  /* Invert toàn bộ GIF khi bật class .gif-invert trên body */
+  body.gif-invert #gifCanvas,
+  body.gif-invert canvas{
+    filter: invert(1) hue-rotate(180deg);
+  }
+
+  /* Nút adaptive luôn tương phản: bg/fg đảo khi invert */
+  .adaptiveBtn {
+    --btn-bg: #3a3a3a;   /* ~25% */
+    --btn-fg: #f2f2f2;   /* ~90% */
+
+    background: var(--btn-bg);
+    color: var(--btn-fg);
+    border: 1px solid var(--btn-fg);
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 14px;
+    font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+    cursor: pointer;
+    position: fixed;
+    right: 14px;
+    bottom: 14px;
+    z-index: 99999;
+    box-shadow: 0 2px 6px rgba(0,0,0,0.4);
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
+  }
+
+  body.gif-invert .adaptiveBtn,
+  body.svg-invert .adaptiveBtn,
+  body.invert .adaptiveBtn {
+    --btn-bg: #f2f2f2;   /* ~90% */
+    --btn-fg: #3a3a3a;   /* ~25% */
+  }
+</style>
+
+<!-- ===== Edge Vietnamese TTS enforcement ===== -->
+<script>
+(function(){
+  try {
+    var _speak = window.speechSynthesis && window.speechSynthesis.speak ? window.speechSynthesis.speak.bind(window.speechSynthesis) : null;
+    if(!_speak) return;
+    var chosen = null;
+    function pickVi(){
+      try {
+        var vs = window.speechSynthesis.getVoices() || [];
+        var v = vs.find(function(v){ return (v.lang||'').toLowerCase() === 'vi-vn'; })
+             || vs.find(function(v){ return /(^|[-_])vi($|[-_])/i.test(v.lang||''); })
+             || vs.find(function(v){ return /vietnam/i.test(v.name||''); });
+        return v || null;
+      } catch(e){ return null; }
+    }
+    function ensureLoaded(cb){
+      var tries = 0;
+      (function loop(){
+        tries++;
+        var vs = window.speechSynthesis.getVoices() || [];
+        if(vs && vs.length){ cb && cb(); return; }
+        if(tries < 60) setTimeout(loop, 100);
+        else cb && cb();
+      })();
+    }
+    window.speechSynthesis.speak = function(u){
+      try {
+        chosen = chosen || pickVi();
+        if(!chosen){ chosen = pickVi(); }
+        if(chosen){
+          try { u.voice = chosen; } catch(_){}
+          if(!u.lang) try { u.lang = chosen.lang || 'vi-VN'; } catch(_){}
+        } else {
+          if(!u.lang) try { u.lang = 'vi-VN'; } catch(_){}
+        }
+      } catch(_){}
+      return _speak(u);
+    };
+    window.speechSynthesis.onvoiceschanged = function(){ chosen = pickVi(); };
+    try { window.speechSynthesis.getVoices(); } catch(_){}
+    ensureLoaded(function(){ chosen = pickVi(); });
+  } catch(e){ /* no-op */ }
+})();
+</script>
+
+<!-- ===== Mobile one-tap TTS unlock & first-gesture bootstrap ===== -->
+<script>
+(function(){
+  if (window.__unlockInstalled) return; window.__unlockInstalled = true;
+  function isMobile(){ return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent); }
+  function pickVi(){
+    try{
+      var vs = window.speechSynthesis ? window.speechSynthesis.getVoices()||[] : [];
+      return vs.find(function(v){ return (v.lang||'').toLowerCase()==='vi-vn'; })
+          || vs.find(function(v){ return /(^|[-_])vi($|[-_])/i.test(v.lang||''); })
+          || vs.find(function(v){ return /vietnam/i.test(v.name||''); })
+          || null;
+    }catch(e){ return null; }
+  }
+  function unlockTTS(cb){
+    try{
+      try{ window.speechSynthesis && window.speechSynthesis.getVoices(); }catch(_){}
+      var tries=0;
+      (function ensureVoices(){
+        var vs=(window.speechSynthesis && window.speechSynthesis.getVoices())||[];
+        if(vs.length || tries>40){
+          try{
+            var u=new SpeechSynthesisUtterance(" ");
+            var v=pickVi();
+            if(v) try{ u.voice=v; }catch(_){}
+            u.lang=(v && v.lang) || "vi-VN";
+            u.volume=0; u.rate=1; u.pitch=1;
+            var done=function(){ cb&&cb(); };
+            u.onend=done; u.onerror=done; u.onstart=function(){ setTimeout(done, 30); };
+            try{ window.speechSynthesis.cancel(); }catch(_){}
+            setTimeout(function(){ try{ window.speechSynthesis.speak(u); }catch(_){ done(); } }, 0);
+          }catch(e){ cb&&cb(); }
+          return;
+        }
+        tries++; setTimeout(ensureVoices, 50);
+      })();
+    }catch(e){ cb&&cb(); }
+  }
+  // Expose
+  window.__unlockTTS = unlockTTS;
+  window.__isMobile = isMobile;
+
+  // Wrap first-user-gesture in togglePlay/playToggle/togglePlayPauseT
+  try{
+    var cand = window.togglePlay || window.playToggle || window.togglePlayPauseT;
+    if(typeof cand === 'function'){
+      var orig = cand;
+      var name = (cand===window.togglePlay?'togglePlay':cand===window.playToggle?'playToggle':'togglePlayPauseT');
+      window[name] = function(){
+        if (isMobile() && !window.firstUserGestureDone){
+          window.firstUserGestureDone = true;
+          return unlockTTS(function(){
+            try{ if(!window.ttsSegments || !window.ttsSegments.length){
+              if (typeof window.initTtsSegments==='function') window.initTtsSegments();
+            } }catch(_){}
+            try{ window.startBoth && window.startBoth(); }catch(_){}
+          });
+        }
+        return orig.apply(this, arguments);
+      };
+    }
+  }catch(_){}
+})();
+</script>
+
+</head>
+<body>
+  <button id="gifInvertBtn" type="button" class="adaptiveBtn">&#9728;</button>
+
+
+  <div id="gifBox" style="width:100vw; height:100vh;">
+    <canvas id="gifCanvas" width="100%" height="100%"></canvas>
+  </div>
+
+  <audio id="bgAudio" src="music0.mp3"></audio>
+
+  <!-- Popup overlay -->
+  <div id="dlgOverlay" aria-hidden="true">
+    <div id="dlgCard" role="dialog" aria-modal="true">
+      <div id="dlgContent">...</div>
+    </div>
+  </div>
+
+<script>
+function ensureVoices(cb){
+  try{
+    const doCb=()=>{ try{ cb&&cb(); }catch(_){}};
+    const v = speechSynthesis.getVoices();
+    if(v && v.length){ doCb(); return; }
+    speechSynthesis.onvoiceschanged = ()=>{ doCb(); };
+    // Nudge voices loading
+    setTimeout(()=>{ try{ speechSynthesis.getVoices(); }catch(_){} }, 0);
+  }catch(_){ cb&&cb(); }
+}
+
+let scriptText = "";
+let GIF_URL = "";
+let anim, hasStarted=false;
+let gifFinished=false, audioFinished=false;
+
+// ----- Popup -----
+function renderContent(src){
+  if(!src) return '...';
+  if(/[<>]/.test(src)) return src;
+  if(/\.(png|jpe?g|gif|webp|svg)$/i.test(src)) return `<img src="${src}" alt="">`;
+  if(/\.(mp4|webm|ogg)$/i.test(src)) return `<video src="${src}" controls></video>`;
+  if(/^https?:\/\//i.test(src) || /\.(html?|pdf)$/i.test(src)){
+    const type = /\.pdf$/i.test(src) ? "application/pdf" : "text/html";
+    return `<div style="width:100%;height:100%;">
+              <object data="${src}" type="${type}" width="100%" height="100%">
+                Không tải được nội dung.
+              </object>
+            </div>`;
+  }
+  return String(src).replace(/\n/g,'<br>');
+}
+function showDialog(src){
+  const overlay=document.getElementById('dlgOverlay');
+  const content=document.getElementById('dlgContent');
+  content.innerHTML=renderContent(src);
+  overlay.style.display='flex';
+  overlay.setAttribute('aria-hidden','false');
+  function close(){ overlay.style.display='none'; overlay.setAttribute('aria-hidden','true'); }
+  overlay.addEventListener('click',(e)=>{ if(e.target===overlay) close(); },{once:true});
+  overlay.onkeydown=(e)=>{ if(e.key==='Enter'||e.key==='Escape'){ e.preventDefault(); close(); } };
+}
+
+// ----- TTS -----
+function parseScript(text){
+  const regex = /\[(.*?)\]/g;
+  let parts=[], lastIndex=0, m, rate=1, pitch=1, volume=1;
+  function pushText(s){ if(s && s.trim()!="") parts.push({text:s, rate, pitch, volume}); }
+  while((m=regex.exec(text))){
+    pushText(text.substring(lastIndex, m.index));
+    const inner=(m[1]||'').trim();
+    const key=inner.split(':',1)[0].trim().toUpperCase();
+    if(key==='POP'){
+      const src = inner.slice(key.length+1).trim();
+      if(src) parts.push({popup:src});
+    }else if(/^R\s*=\s*/i.test(inner)){ rate = parseFloat(inner.split('=')[1])||1;
+    }else if(/^P\s*=\s*/i.test(inner)){ pitch = parseFloat(inner.split('=')[1])||1;
+    }else if(/^V\s*=\s*/i.test(inner)){ volume = parseFloat(inner.split('=')[1])||1;
+    }else if(/^D\s*=\s*/i.test(inner)){
+      const v = parseFloat(inner.split('=')[1]);
+      if(!isNaN(v)) parts.push({delay:v});
+    }else if(/^D0$/i.test(inner) || /^D$/i.test(inner)){
+      parts.push({waitClick:true});
+    }else{
+      pushText('['+inner+']');
+    }
+    lastIndex = regex.lastIndex;
+  }
+  pushText(text.substring(lastIndex));
+  return parts;
+}
+
+let ttsParts=[], currentPart=0, charIndex=0;
+let awaitingClick=false, ttsIsPlaying=false, ttsFinished=false;
+
+function speakPart(){
+  if(currentPart >= ttsParts.length){ ttsIsPlaying=false; ttsFinished=true; checkAllFinished(); return; }
+  const part = ttsParts[currentPart];
+  if(part && part.popup){ try{ showDialog(part.popup); }catch(_){ } currentPart++; charIndex=0; speakPart(); return; }
+  if(part && part.waitClick){ currentPart++; charIndex=0; awaitingClick=true; pauseForWaitClick(); return; }
+  if(part && typeof part.delay==='number'){ setTimeout(()=>{ currentPart++; charIndex=0; speakPart(); }, part.delay*1000); return; }
+  const text = (part && part.text) ? part.text : "";
+  if(text.trim()===""){ currentPart++; charIndex=0; speakPart(); return; }
+  const u=new SpeechSynthesisUtterance(text.substring(charIndex));
+  u.lang="vi-VN"; u.rate=part.rate||1; u.pitch=part.pitch||1; u.volume=part.volume||1;
+  u.onend=()=>{ currentPart++; charIndex=0; speakPart(); };
+  u.onboundary=(e)=>{ if(typeof e.charIndex==='number') charIndex=e.charIndex; };
+  try{ speechSynthesis.speak(u); }catch(_){ }
+  ttsIsPlaying=true;
+}
+function startTTS(){ cancelTTS(); ttsParts=parseScript(scriptText); currentPart=0; charIndex=0; ttsIsPlaying=true; ttsFinished=false; speakPart(); }
+function pauseTTS(){ try{ if(speechSynthesis.speaking && !speechSynthesis.paused) speechSynthesis.pause(); }catch(_){ } ttsIsPlaying=false; }
+function resumeTTS(){
+  try{
+    if(speechSynthesis.paused){ speechSynthesis.resume(); ttsIsPlaying=true; return; }
+  }catch(_){}
+  if(!speechSynthesis.speaking){ setTimeout(()=>{ ensureVoices(()=>{ ttsIsPlaying=true; speakPart(); }); },0); }
+}
+function cancelTTS(){ try{ speechSynthesis.cancel(); }catch(_){ } ttsIsPlaying=false; currentPart=0; charIndex=0; }
+function continueAfterClick(){ awaitingClick=false; resumeMedia(); setTimeout(()=>{ ensureVoices(()=>{ ttsIsPlaying=true; speakPart(); }); },0); }
+
+// ----- GIF Handling -----
+const canvas=document.getElementById("gifCanvas");
+const ctx = canvas.getContext("2d", { willReadFrequently: true });
+const audio=document.getElementById("bgAudio");
+
+let firstFrame = null;
+let sawNonFirst = false;
+let prevImageData=null, currImageData=null;
+
+function initGif(url){
+  gifler(url).get(a => {
+    anim = a;
+    anim.onDrawFrame = (ctxFrame, frame) => {
+      ctx.drawImage(frame.buffer, frame.x, frame.y);
+      prevImageData = currImageData;
+      try {
+        currImageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      } catch(_) { currImageData = null; }
+      if (!firstFrame) {
+        firstFrame = frame.buffer;
+        return;
+      }
+      if (frame.buffer !== firstFrame) {
+        sawNonFirst = true;
+      } else if (sawNonFirst) {
+        anim.stop(); gifFinished = true;
+        if (prevImageData) {
+          ctx.putImageData(prevImageData, 0, 0);
+        }
+        checkAllFinished();
+      }
+    };
+  });
+}
+
+function attachIfNeeded(){ if(!hasStarted&&anim){ anim.animateInCanvas(canvas,true); hasStarted=true; } }
+
+function checkAllFinished(){
+  const noAudio = !audio.src;
+  if(gifFinished && ttsFinished && (audioFinished || noAudio)){
+    isPlaying=false; finished=true;
+    canvas.style.border = "none";
+    setTimeout(()=>{
+      if(finished){
+        gifBox.innerHTML = "";
+        console.log("Canvas cleared after 1 minute");
+      }
+    }, 60000);
+  }
+}
+
+function pauseForWaitClick(){ pauseMedia(); pauseTTS(); isPlaying=false; canvas.style.border="4px solid red"; }
+function resumeMedia(){ if(!gifFinished){ anim && anim.start(); } if(audio.src){ try{ audio.play(); }catch(_){ } } }
+function pauseMedia(){ anim && anim.stop(); audio.pause(); }
+
+function playToggle(){
+  if(gifFinished || finished){ return; }
+  if(!isPlaying){
+    attachIfNeeded();
+    resumeMedia();
+    if(awaitingClick){
+      continueAfterClick();
+    }else if(typeof speechSynthesis!=='undefined' && speechSynthesis.paused){
+      resumeTTS(); // resume đúng vị trí đang đọc
+    }else if(currentPart===0 && charIndex===0){
+      // lần đầu
+      setTimeout(()=>{ ensureVoices(()=>{ startTTS(); }); },0);
+    }else{
+      // không paused và không ở đầu: nếu đang không speaking thì phát tiếp từ charIndex
+      resumeTTS();
+    }
+    isPlaying=true; canvas.style.border="4px solid lime";
+  }else{
+    // Pause: giữ nguyên charIndex để resume được
+    pauseMedia(); pauseTTS();
+    isPlaying=false; canvas.style.border="4px solid red";
+  }
+}
+
+let isPlaying=false, finished=false;
+const Box=document.getElementById("gifBox");
+Box.addEventListener('click', playToggle);
+audio.addEventListener('ended',()=>{ audioFinished=true; checkAllFinished(); });
+
+// --- Pause/Resume khi mất/gain focus ---
+window.addEventListener("blur", () => {
+  if (isPlaying) {
+    pauseMedia();
+    pauseTTS();
+    isPlaying = false;
+    canvas.style.border = "4px solid red";
+  }
+});
+
+window.addEventListener("focus", () => {
+  if (!isPlaying && !finished) {
+    resumeMedia();
+    resumeTTS();
+    isPlaying = true;
+    canvas.style.border = "4px solid lime";
+  }
+});
+
+function getQueryParam(name){
+  const urlParams = new URLSearchParams(window.location.search);
+  return urlParams.get(name);
+}
+
+async function loadConfig(){
+  const cfgFile = getQueryParam("file") || "gif.json";
+  const res = await fetch(cfgFile);
+  const cfgList = await res.json();
+
+  const list = Array.isArray(cfgList) ? cfgList : [cfgList];
+  const idx = parseInt(getQueryParam("i") || "0", 10);
+  const cfg = list[idx] || list[0];
+
+  scriptText = cfg.scriptText || "";
+  GIF_URL = cfg.GIF_URL || "";
+
+  initGif(GIF_URL);
+  // ❌ Không auto start TTS ở đây nữa, sẽ chờ click đầu tiên
+}
+
+loadConfig();
+</script>
+
+<!-- ===== Distinguish manual pause vs [D0]/waitClick (if app uses these flags) ===== -->
+<script>
+(function(){
+  window.__waitingMarkerClick = window.__waitingMarkerClick || false;
+  window.__userPaused = window.__userPaused || false;
+})();
+</script>
+
+
+<script>
+  // Toggle invert cho GIF: adaptive button + CSS filter
+  (function(){
+    const btn = document.getElementById('gifInvertBtn');
+    if(!btn) return;
+    let on = false;
+    function update(){
+      btn.innerHTML = on ? '&#9790;' : '&#9728;'; // moon / sun
+      document.body.classList.toggle('gif-invert', on);
+      document.body.classList.toggle('invert', on);
+    }
+    btn.addEventListener('click', ()=>{
+      on = !on;
+      update();
+    });
+    update();
+  })();
+</script>
+</body>
+</html>

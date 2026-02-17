@@ -1,0 +1,291 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Form with Bootstrap Modal</title>
+  <link href="./jquery/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="./jquery/dataTables.min.css" />
+  <script src="./jquery/jqueryv.min.js"></script>
+  <script src="./jquery/popper.min.js"></script>
+  <script src="./jquery/bootstrap.min.js"></script>
+  <script src="./jquery/dataTables.min.js"></script>
+  <script src="./jquery/bootstrap.bundle.min.js"></script>
+  <script src="./jquery/jspdf.umd.min.js"></script>
+  <style>
+    .modal-content { padding: 20px; }
+    .form-container { max-width: 500px; margin: auto; padding: 20px; box-shadow: 0 0 10px rgba(0, 0, 0, 0.1); background-color: #fff; }
+    .custom-file-upload { display: inline-block; padding: 10px 20px; color: white; background-color: #007bff; border-radius: 5px; cursor: pointer; }
+    #file-name { margin-left: 10px; font-style: italic; color: #333; }
+    #media { display: none; }
+.text-danger { color: #dc3545; font-weight: bold; }
+.text-success { color: #28a745; font-weight: bold; }
+
+  </style>
+</head>
+<body class="bg-light">
+<div class="container">
+  <button type="button" class="btn btn-primary mt-5" data-toggle="modal" data-target="#myModal">&#128238;</button>
+  <div class="modal fade" id="myModal" tabindex="-1" aria-labelledby="exampleModalLabel" aria-hidden="true" data-backdrop="true" data-keyboard="true">
+
+    <div class="modal-dialog">
+      <div class="modal-content">
+        
+        <div class="modal-body">
+          <div id="form-container">
+            <form id="submit-to-google-sheet">
+              <div class="form-group">
+                <input type="text" class="form-control" name="name" id="name" placeholder="01# Lý An BT 10;" pattern="^[0-4 G][0-9 V][#]\s.* BT[\s %].*;$" required />
+              </div>
+              <div class="form-group mt-2">
+                <label for="media" class="custom-file-upload">🗀 </label>
+                <input class="form-control-file" type="file" name="media" id="media" multiple accept=".jpg,.png,.pdf" />
+ <br>
+                <span id="file-name"></span>
+              </div>
+              <br />
+              <button type="submit" class="btn btn-primary btn-block" id="submit-button"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-send" viewBox="0 0 16 16">  <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z"/></svg>
+</button>
+            </form>
+          </div>
+          <div id="thank-you-message" style="display: none;"><h5>Thanks!</h5></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="mt-5">
+    <table id="dataTable" class="table table-striped table-bordered">
+      <thead>
+        <tr>
+          <th>⌛</th>
+          <th>📋</th>
+          <th>🖊️</th>
+          <th>📌</th>
+        </tr>
+      </thead>
+      <tbody id="tableBody"></tbody>
+    </table>
+  </div>
+</div>
+<script>
+const scriptURL = new URLSearchParams(window.location.search).get('url') ||
+  'https://script.google.com/macros/s/AKfycbwM1YbVN-4WCs2MJa4X8sTIqlYQrPnY5J_I8hZn_Sc34rPpoasirY7frdBelkDyhgV2/exec';
+const form = document.forms['submit-to-google-sheet'];
+const fileInput = document.getElementById('media');
+const fileNameDisplay = document.getElementById('file-name');
+const submitButton = document.getElementById('submit-button');
+const formContainer = document.getElementById('form-container');
+const thankYouMessage = document.getElementById('thank-you-message');
+
+fileInput.addEventListener('change', function () {
+  const files = Array.from(this.files);
+  if (files.length === 0) {
+    fileNameDisplay.textContent = '';
+    return;
+  }
+
+  const allowedImageTypes = ['jpg', 'png'];
+  const allowedPDF = ['pdf'];
+  const fileNames = files.map(f => f.name);
+  const extensions = files.map(f => f.name.split('.').pop().toLowerCase());
+
+  const isAllImages = extensions.every(ext => allowedImageTypes.includes(ext));
+  const isAllPDFs = extensions.every(ext => allowedPDF.includes(ext));
+
+  if (!isAllImages && !isAllPDFs) {
+    alert("Chỉ chấp nhận ảnh (JPG, PNG) hoặc 1 file PDF.");
+    fileInput.value = '';
+    fileNameDisplay.textContent = '';
+    return;
+  }
+
+  if (isAllPDFs && files.length > 1) {
+    alert("Chỉ chấp nhận ảnh (JPG, PNG) hoặc 1 file PDF.");
+    fileInput.value = '';
+    fileNameDisplay.textContent = '';
+    return;
+  }
+
+  const invalidFiles = extensions.filter(ext => ![...allowedImageTypes, ...allowedPDF].includes(ext));
+  if (invalidFiles.length > 0) {
+    alert("Chỉ chấp nhận ảnh (JPG, PNG) hoặc 1 file PDF.");
+    fileInput.value = '';
+    fileNameDisplay.textContent = '';
+    return;
+  }
+
+  fileNameDisplay.innerHTML = fileNames.map(name => `<div>${name}</div>`).join('');
+});
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+  const openButton = document.querySelector('[data-toggle="modal"]');
+  openButton.addEventListener('click', () => {
+    form.reset();
+    fileNameDisplay.textContent = '';
+    thankYouMessage.style.display = 'none';
+    submitButton.disabled = false;
+    submitButton.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-send" viewBox="0 0 16 16">  <path d="M15.854.146a.5.5 0 0 1 .11.54l-5.819 14.547a.75.75 0 0 1-1.329.124l-3.178-4.995L.643 7.184a.75.75 0 0 1 .124-1.33L15.314.037a.5.5 0 0 1 .54.11ZM6.636 10.07l2.761 4.338L14.13 2.576zm6.787-8.201L1.591 6.602l4.339 2.76z"/></svg>';
+
+    formContainer.style.display = 'block';
+  });
+});
+
+form.addEventListener('submit', async (e) => {
+  // Kiểm tra tổng dung lượng tất cả file ảnh không quá 10MB
+  const maxTotalSize = 10 * 1024 * 1024; // 10MB
+  let totalSize = 0;
+  for (let f of fileInput.files) totalSize += f.size;
+  if (totalSize > maxTotalSize) {
+    alert("Tổng dung lượng  vượt quá 10MB");
+    return;
+  }
+
+  e.preventDefault();
+  const formData = new FormData(form);
+  if (fileInput.files.length > 0) {
+    const file = fileInput.files[0];
+    const fileExtension = file.name.split('.').pop().toLowerCase();
+    if (!['jpg','png', 'pdf'].includes(fileExtension)) {
+      alert('Only JPG/PNG and PDF files are allowed.');
+      return;
+    }
+    if (file.size > 1024 * 1024 * 10) {
+      alert('File size should be less than 10MB.');
+      return;
+    }
+    
+
+if (Array.from(fileInput.files).every(f => ['jpg',  'png'].includes(f.name.split('.').pop().toLowerCase()))) {
+  const { jsPDF } = window.jspdf;
+  let pdf;
+
+  for (let i = 0; i < fileInput.files.length; i++) {
+    const file = fileInput.files[i];
+    const imgData = await readFileAsDataURL(file);
+    const img = new Image();
+    img.src = imgData;
+
+    await new Promise(resolve => {
+      img.onload = () => {
+        const width = img.width;
+        const height = img.height;
+
+        if (i === 0) {
+          pdf = new jsPDF({
+            orientation: width > height ? "landscape" : "portrait",
+            unit: "px",
+            format: [width, height]
+          });
+        } else {
+          pdf.addPage([width, height], width > height ? "landscape" : "portrait");
+        }
+
+        const format = file.type === 'image/png' ? 'PNG' : 'JPEG';
+        pdf.addImage(img, format, 0, 0, width, height);
+        resolve();
+      };
+    });
+  }
+
+  const pdfBlob = pdf.output('blob');
+  const readerPDF = new FileReader();
+  readerPDF.onloadend = async function () {
+    formData.append("media", readerPDF.result.split(",")[1]);
+    formData.set("fileExtension", "pdf");
+    await submitForm(formData);
+  };
+  readerPDF.readAsDataURL(pdfBlob);
+  return;
+}
+
+
+    const reader = new FileReader();
+    reader.onload = async function () {
+      formData.append('media', reader.result.split(',')[1]);
+      formData.append('fileExtension', fileExtension);
+      await submitForm(formData);
+    };
+    reader.readAsDataURL(file);
+  } else {
+    await submitForm(formData);
+  }
+});
+
+
+function readFileAsDataURL(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function submitForm(formData) {
+  submitButton.disabled = true;
+  submitButton.innerText = 'Loading...';
+
+  fetch(scriptURL, { method: 'POST', body: formData })
+    .then((response) => response.json())
+    .then((result) => {
+      const isSuccess = result.result === 'success';
+      const message = result.reason || result.message || "bạn đã nộp bài thành công.";
+
+      formContainer.style.display = 'none';
+      thankYouMessage.innerHTML = `<h5 class="${isSuccess ? 'text-success' : 'text-danger'}">${message}</h5>`;
+      thankYouMessage.style.display = 'block';
+    })
+    .catch(() => {
+      formContainer.style.display = 'none';
+      thankYouMessage.innerHTML = `<h5 class="text-danger">Có lỗi xảy ra. Vui lòng thử lại sau!</h5>`;
+      thankYouMessage.style.display = 'block';
+    })
+    .finally(() => {
+      submitButton.disabled = false;
+    });
+}
+
+$(document).ready(function () {
+  fetch(scriptURL)
+    .then((response) => response.json())
+    .then((data) => {
+      const tableBody = document.getElementById('tableBody');
+      data.forEach((row) => {
+        let timestamp = new Date(row['timestamp'] || Date.now());
+        const formattedDate =
+          timestamp.getFullYear() + '-' +
+          String(timestamp.getMonth() + 1).padStart(2, '0') + '-' +
+          String(timestamp.getDate()).padStart(2, '0') + ' ' +
+          String(timestamp.getHours()).padStart(2, '0') + ':' +
+          String(timestamp.getMinutes()).padStart(2, '0') + ':' +
+          String(timestamp.getSeconds()).padStart(2, '0');
+        const nameText = (row['name'] || '').toUpperCase();
+        const hasBT = nameText.includes('BT');
+
+        const mediaLink =
+          row['media'] && hasBT
+            ? `<a href="${row['media']}" target="_blank">#</a>`
+            : '';
+        let tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${formattedDate}</td>
+          <td>${row['name'] || 'Chưa có tên'}</td>
+          <td>${mediaLink}</td>
+          <td>${row['mark'] || ''}</td>
+        `;
+        tableBody.appendChild(tr);
+      });
+      if (tableBody.children.length > 0) {
+        $('#dataTable').DataTable();
+      }
+    })
+    .catch((error) => console.error('Error fetching data:', error));
+});
+</script>
+
+
+</body>
+</html>
