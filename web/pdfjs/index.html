@@ -1,1 +1,1700 @@
 
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>PDF Minimal Viewer</title>
+
+  <style>
+  
+:root{
+  font-family: system-ui, Arial, sans-serif;
+}
+
+/* ===== CẤU TRÚC TỔNG ===== */
+html, body{
+  height: 100%;
+}
+
+body{
+  margin: 0;
+  overflow: hidden; /* chỉ scroll trong .stage */
+}
+
+/* ===== TOOLBAR (CỐ ĐỊNH) ===== */
+.bar{
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 12px;
+
+  padding: 10px 12px;
+  border-bottom: 1px solid #ddd;
+  background: #fff;
+
+  touch-action: manipulation; /* không kéo scroll khi vuốt trên toolbar */
+}
+
+.bar button{
+  padding: 6px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ===== VÙNG NỘI DUNG (CUỘN) ===== */
+.stage{
+  height: 100vh;
+  overflow: auto;
+  overscroll-behavior: contain;
+
+  /* chừa đúng chiều cao toolbar + 10px khoảng cách */
+  padding-top: calc(var(--bar-h, 64px) + 10px);
+  padding-left: 12px;
+  padding-right: 12px;
+  padding-bottom: 12px;
+
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+}
+
+/* ===== CANVAS PDF ===== */
+canvas{
+  max-width: 100%;
+  height: auto;
+  border: 1px solid #eee;
+}
+
+/* ===== INPUT TRANG (ẨN SPINNER) ===== */
+/* Chrome / Edge / Safari */
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button{
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+
+
+/* input trang */
+#pageNo{
+  font-size: 16px;
+  text-align: center;
+}
+
+.pdfWrap{position:relative;display:inline-block;}
+#anno{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;}
+/* gọn cho mobile */
+.bar .annoCtl{display:inline-flex;align-items:center;gap:6px;margin-left:8px;}
+.bar .annoCtl button{padding:6px 8px;}
+.bar .annoCtl .chk{display:inline-flex;align-items:center;gap:4px;font-size:12px;user-select:none;}
+.bar .annoCtl input[type=checkbox]{width:16px;height:16px;}
+
+
+
+  
+.pdfWrap{position:relative;display:inline-block;}
+#anno{position:absolute;left:0;top:0;width:100%;height:100%;touch-action:none;}
+/* gọn cho mobile */
+.bar .annoCtl{display:inline-flex;align-items:center;gap:6px;margin-left:8px;}
+.bar .annoCtl button{padding:6px 8px;}
+.bar .annoCtl .chk{display:inline-flex;align-items:center;gap:4px;font-size:12px;user-select:none;}
+.bar .annoCtl input[type=checkbox]{width:16px;height:16px;}
+
+
+/* Invert toàn bộ PDF + annotate (CSS-only, tránh double invert) */
+
+/* Invert chỉ áp lên PDF canvas (không áp lên note) */
+#c.invert{filter: invert(1) hue-rotate(180deg);}
+/* ===== NOTE OVERLAY (from net.html) ===== */
+#anno{
+  /* patched: use #anno as note/annotation overlay canvas */
+  position:absolute;
+  inset:0;
+  width:100%;
+  height:100%;
+  z-index:90;          /* above <object>, below menu button */
+  touch-action:none;
+  pointer-events:none; /* bật note mới nhận input */
+}
+
+#annoBar{
+  position:fixed;
+  right:10px;
+  top:60px;
+  z-index:210;
+  display:none;
+}
+
+
+#annoBar.show{ display:block; }
+/* mặc định: dọc */
+#annoBar button{
+  display:block;
+  width:44px;
+  height:44px;
+  border-radius:50%;
+  font-size:18px;
+  margin-bottom:6px;
+}
+
+/* MÀN DỌC -> ngang */
+@media (orientation: portrait){
+  #annoBar{
+    right:50%;
+    top:auto;
+    bottom:10px;
+    transform:translateX(50%);
+  }
+  #annoBar button{
+    display:inline-block;
+    margin-right:6px;
+    margin-bottom:0;
+  }
+}
+/* MÀN NGANG -> dọc */
+@media (orientation: landscape){
+  #annoBar{
+    right:10px;
+    top:60px;
+    bottom:auto;
+    transform:none;
+  }
+  #annoBar button{
+    display:block;
+    margin-bottom:6px;
+    margin-right:0;
+  }
+}
+
+#noteToggleBtn{
+  position:fixed;
+  right:10px;
+  bottom:10px;
+  width:32px;
+  height:32px;
+  border-radius:50%;
+  z-index:9999;
+  font-size:16px;
+  line-height:32px;
+  text-align:center;
+  cursor:pointer;
+  touch-action: manipulation;
+  -webkit-user-select:none;
+  user-select:none;
+  -webkit-tap-highlight-color: transparent;
+
+  border:2px solid #666;
+  background:#e9e9e9;
+}
+#noteToggleBtn.active{
+  background:#808080;
+  color:#fff;
+}
+
+
+
+#noteSelectBtn.active, #noteDelSelBtn.active{
+  background:#808080;
+  color:#fff;
+}
+
+
+/* ===== DASH CUSTOM CHECKBOX (index step1) ===== */
+#annoBar .chk{
+  width:44px;height:44px;
+  border-radius:999px;
+  border:2px solid rgba(80,80,80,0.55);
+  background:rgba(255,255,255,0.65);
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  cursor:pointer;
+  user-select:none;
+  -webkit-user-select:none;
+  touch-action:manipulation;
+}
+#dashToggle{
+  position:absolute;
+  opacity:0;
+  pointer-events:none;
+}
+#annoBar .chk .dashBox{
+  width:20px;height:20px;
+  border-radius:6px;
+  border:2px solid rgba(60,60,60,0.55);
+  background:transparent;
+  box-sizing:border-box;
+}
+/* ===== TEXT EDITOR OVERLAY ===== */
+#textEdit{
+  position:fixed;
+  display:none;
+  min-width:60px;
+  min-height:28px;
+  padding:2px 4px;
+  border:1px solid rgba(110,168,255,0.95);
+  border-radius:6px;
+  background:transparent;
+  outline:none;
+  z-index:9999;
+  color:#111;
+  font: 44px Arial, sans-serif;
+  line-height:1.2;
+  white-space:pre-wrap;
+  caret-color:#1f6feb;
+  -webkit-user-select:text;
+  user-select:text;
+}
+#textEdit::selection{ background: rgba(110,168,255,0.35); }
+
+#dashToggle:checked + .dashBox{
+  background:rgba(60,60,60,0.75);
+  border-color:rgba(60,60,60,0.75);
+}
+
+
+
+/* ====== OVERRIDE LAYOUT (BoardT-like) ====== */
+/* đảm bảo #annoBar và các nút bấm được click */
+#annoBar, #annoBar *{ pointer-events:auto; }
+
+/* canh icon giữa nút tròn */
+#annoBar button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+  padding:0;
+}
+
+/* group container */
+#annoBar .annoGrp{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  justify-content:center;
+  margin-bottom:8px;
+}
+
+/* mặc định: landscape = dọc */
+@media (orientation: landscape){
+  #annoBar{
+    right:10px !important;
+    left:auto !important;
+    top:60px !important;
+    bottom:auto !important;
+    transform:none !important;
+  }
+  #annoBar .annoGrp{
+    flex-direction: column !important;
+    margin: 0 0 10px 0 !important;
+  }
+}
+
+/* portrait = ngang (giống BoardT) */
+@media (orientation: portrait){
+  #annoBar{
+    right:50% !important;
+    left:auto !important;
+    top:auto !important;
+    bottom:10px !important;
+    transform:translateX(50%) !important;
+    white-space: nowrap;
+  }
+  #annoBar .annoGrp{
+    display:inline-flex !important;
+    flex-direction: row !important;
+    gap:8px !important;
+    margin:0 10px 0 0 !important;
+    vertical-align: middle;
+  }
+}
+
+/* tăng khoảng cách giữa các nút để dễ bấm */
+#annoBar button, #annoBar .chk{
+  margin:0 !important;
+}
+
+/* ===== BoardT-like grouped annoBar (panels) ===== */
+#annoBar, #annoBar *{ pointer-events:auto; }
+
+#annoBar{ display:none; } /* JS vẫn điều khiển show/hide qua class .show của index */
+#annoBar.show{ display:block; }
+
+/* nhóm nút */
+#annoBar .annoGrp{
+  display:flex;
+  gap:8px;
+  align-items:center;
+  justify-content:center;
+  margin:8px 0;
+}
+
+/* panel con */
+.notePanel{
+  position:absolute;
+  right:0;
+  bottom:56px;
+  display:flex;
+  gap:8px;
+  padding:10px;
+  border-radius:16px;
+  background:rgba(255,255,255,0.92);
+  border:2px solid #bbb;
+  box-shadow:0 8px 18px rgba(0,0,0,0.12);
+  z-index:240;
+}
+.hidden{ display:none !important; }
+#grpMode, #grpOps{ position:relative; }
+
+/* ẩn control phụ (toolErase...) */
+.hiddenCtl{ display:none !important; }
+
+/* canh icon giữa nút tròn */
+#annoBar button{
+  display:inline-flex;
+  align-items:center;
+  justify-content:center;
+  line-height:1;
+  padding:0;
+}
+
+/* ====== OVERRIDE LAYOUT: portrait = nút ngang + panel dọc; landscape = nút dọc + panel ngang ====== */
+@media (orientation: portrait){
+  #annoBar{
+    right:50% !important;
+    left:auto !important;
+    top:auto !important;
+    bottom:10px !important;
+    transform:translateX(50%) !important;
+    white-space:nowrap;
+  }
+  #annoBar .annoGrp{
+    display:inline-flex !important;
+    flex-direction:row !important;
+    margin:0 8px 0 0 !important;
+    vertical-align:middle;
+  }
+  /* panel bung DỌC lên trên */
+  #annoBar .notePanel{
+    flex-direction:column !important;
+    bottom:100% !important;
+    left:50% !important;
+    right:auto !important;
+    transform:translateX(-50%) !important;
+  }
+}
+
+@media (orientation: landscape){
+  #annoBar{
+    right:10px !important;
+    left:auto !important;
+    top:60px !important;
+    bottom:auto !important;
+    transform:none !important;
+  }
+  #annoBar .annoGrp{
+    display:flex !important;
+    flex-direction:column !important;
+    margin:8px 0 !important;
+  }
+  /* panel bung NGANG sang trái */
+  #annoBar .notePanel{
+    flex-direction:row !important;
+    right:100% !important;
+    left:auto !important;
+    top:50% !important;
+    bottom:auto !important;
+    transform:translateY(-50%) !important;
+  }
+}
+
+</style>
+</head>
+
+<body>
+
+  <div class="bar">
+    <button id="prev">◀</button>
+    
+
+    <span>
+      <span class="pageBox">
+  <input id="pageNo" type="number" min="1" value="1" inputmode="numeric" aria-label="Trang hiện tại">
+  <span class="sep">/</span>
+  <b id="pageCount">?</b>
+</span>
+    </span>
+<button id="next">▶</button>
+    <label>
+      Zoom:
+      <select id="zoom">
+        <option value="auto" selected>Auto</option>
+        <option value="fit-width">fit-width</option>
+        <option value="fit-height">fit-height</option>
+        <option value="fit-page">fit-page</option>
+      </select>
+    </label>
+<button id="exportPdf" title="Xuất PDF (gộp chú thích)">⬇️PDF</button>
+     
+
+  </div>
+  <button id="noteToggleBtn" title="Bật/Tắt chú thích">✏️</button>
+
+<div id="annoBar">
+  <!-- GROUP 1: Color (tap đổi màu / hold = eraser) -->
+  <div class="annoGrp" id="grpColor">
+    <button id="colorBtn" title="Tap đổi màu / Hold: Eraser">K</button>
+    <!-- giữ nút tẩy cho logic cũ (ẩn) -->
+    <button id="toolErase" class="hiddenCtl" title="Tẩy">🧽</button>
+  </div>
+
+  <!-- GROUP 2: Mode (tap mở panel chọn pen/text/shape) -->
+  <div class="annoGrp" id="grpMode">
+    <button id="noteModeBtn" title="Tap: chọn chế độ vẽ / text / shape">✍️</button>
+    <div id="noteModePanel" class="notePanel hidden" aria-label="Draw/Text/Shape">
+      <button id="toolPen" title="Bút">✏️</button>
+      <button id="toolText" title="Text">T</button>
+      <button id="toolLine" title="Đường thẳng">／</button>
+      <button id="toolRect" title="Hình chữ nhật">▭</button>
+      <button id="toolEllipse" title="Hình elip">◯</button>
+    </div>
+  </div>
+
+  <!-- GROUP 3: Menu (tap mở panel) / hold ẩn-hiện note -->
+  <div class="annoGrp" id="grpOps">
+    <button id="noteMenuBtn" title="Tap: mở menu chú thích / Hold: ẩn-hiện note">::</button>
+    <div id="noteMenuPanel" class="notePanel hidden" aria-label="Menu">
+      <button id="selectBtn" title="Chọn vùng (rect) để move/xóa">⬚</button>
+      <button id="undoBtn" title="Undo">↶</button>
+      <button id="redoBtn" title="Redo">↷</button>
+      <button id="invertBtn" title="Invert (đảo màu)">🌗</button>
+
+      <label class="chk" title="Nét đứt" style="display:none;">
+        <input id="dashToggle" type="checkbox" style="display:none;"/>
+        <span class="dashBox" aria-hidden="true"></span>
+      </label>
+
+      <button id="toggleNoteBtn" title="Ẩn/hiện ghi chú" style="display:none;">👁️</button>
+      <button id="clearAnno" title="Xóa chú thích trang / xóa vùng đã chọn">🗑️</button>
+    </div>
+  </div>
+</div>
+  <main class="stage">
+    <div class="pdfWrap">
+      <canvas id="c"></canvas>
+      <canvas id="anno"></canvas>
+      <div id="textEdit" contenteditable="true"></div>
+    </div>
+  </main>
+
+  <!-- PDF.js legacy (đúng version với app.js) -->
+  <script src="vendor/pdf.min.js"></script>
+  <script src="vendor/pdf-lib.min.js"></script>
+
+  <script>
+  (() => {
+    const pdfCanvas = document.getElementById('c');
+    const annoCanvas = document.getElementById('anno');
+    if (!pdfCanvas || !annoCanvas) return;
+    const a = annoCanvas.getContext('2d');
+
+    // ===== Stroke store (để invert đổi màu cả nét đã vẽ) =====
+    const STROKES = []; // {tool:'pen'|'erase', colorIdx, w, alpha, pts:[{x,y},...]}
+    // ===== History (Undo/Redo) - index step1 =====
+    const HIST = [];
+    const HIST_REDO = [];
+    const HIST_MAX = 50;
+
+    
+    
+    // ===== UNDO / REDO (bền, ít lỗi) =====
+    
+
+    function snapshot(){
+      return JSON.parse(JSON.stringify(STROKES));
+    }
+    function restoreState(arr){
+      STROKES.length = 0;
+      if(Array.isArray(arr)){
+        for(const s of arr){
+              STROKES.push(s);
+              if(s && s.tool==='text'){ try{ setTextPtsFromBBox(s); }catch(_){ } }
+            }
+      }
+      clearSelection();
+      redrawAnno(true);
+      saveAnno();
+    }
+    function pushHist(){
+      try{
+        HIST.push(snapshot());
+        if(HIST.length > HIST_MAX) HIST.shift();
+        HIST_REDO.length = 0;
+      }catch(e){}
+    }
+    function doUndo(){
+      if(HIST.length <= 1) return; // còn 1 state là hiện tại
+      try{
+        const cur = HIST.pop();
+        HIST_REDO.push(cur);
+        const prev = HIST[HIST.length - 1];
+        restoreState(prev);
+      }catch(e){}
+    }
+    function doRedo(){
+      if(!HIST_REDO.length) return;
+      try{
+        const next = HIST_REDO.pop();
+        HIST.push(next);
+        restoreState(next);
+      }catch(e){}
+    }
+
+    let curStroke = null;
+
+    function beginStroke(toolName, x, y){
+      const c = PAL()[colorIdx];
+      curStroke = {
+        tool: toolName,
+        colorIdx,
+        w: (toolName==='erase') ? ERASER_W : c.w,
+        alpha: (toolName==='erase') ? 1 : (c.alpha ?? 1),
+        pts: [{x,y}]
+      };
+    }
+    function addPoint(x,y){
+      if(curStroke) curStroke.pts.push({x,y});
+    }
+    function endStroke(){
+      if(curStroke && curStroke.pts.length>1){
+        STROKES.push(curStroke);
+        pushHist();
+      }
+      curStroke = null;
+    }
+
+    function redrawAnno(alsoDrawSel){
+      if(!STROKES.length){
+        a.clearRect(0,0,annoCanvas.width,annoCanvas.height);
+        // chỉ vẽ khung chọn nếu có
+        if(alsoDrawSel && selRect){
+          const r = normRect(selRect);
+          a.save();
+          a.globalCompositeOperation='source-over';
+          a.globalAlpha=0.9;
+          a.setLineDash([10,8]);
+          a.lineWidth=2;
+          a.strokeStyle='#888888';
+          a.strokeRect(r.x,r.y,r.w,r.h);
+          a.restore();
+        }
+        return;
+      }
+      a.save();
+      a.setTransform(1,0,0,1,0,0);
+      a.globalCompositeOperation = 'source-over';
+      a.globalAlpha = 1;
+      a.clearRect(0,0,annoCanvas.width,annoCanvas.height);
+
+      for(const s of STROKES){
+  if(!s) continue;
+
+  // TEXT
+  if(s.tool === 'text'){
+    const c = PAL()[s.colorIdx ?? 0];
+    a.globalCompositeOperation = 'source-over';
+    a.globalAlpha = 1;
+    a.fillStyle = c.color;
+    const fsT = s.fontSize || 44;
+    const lhT = fsT * 1.2;
+    a.font = fsT + 'px Arial';
+    a.textBaseline = 'top';
+    a.setLineDash([]);
+    const lines = String(s.text || '').split('\n');
+    for(let li=0; li<lines.length; li++){
+      a.fillText(lines[li] || '', s.x, s.y + li * lhT);
+    }
+    continue;
+  }
+
+  // PEN/ERASE/SHAPE (pts)
+  if(!s.pts || s.pts.length<2) continue;
+  a.lineCap = 'round';
+  a.lineJoin = 'round';
+  a.lineWidth = s.w;
+  a.setLineDash((s.tool==='erase') ? [] : (s.dash ? [10,8] : []));
+
+  if(s.tool === 'erase'){
+    a.globalCompositeOperation = 'destination-out';
+    a.globalAlpha = 1;
+    a.strokeStyle = '#000';
+  }else{
+    const c = PAL()[s.colorIdx];
+    a.globalCompositeOperation = 'source-over';
+    a.globalAlpha = s.alpha ?? 1;
+    a.strokeStyle = c.color;
+  }
+
+  a.beginPath();
+  a.moveTo(s.pts[0].x, s.pts[0].y);
+  for(let i=1;i<s.pts.length;i++){
+    a.lineTo(s.pts[i].x, s.pts[i].y);
+  }
+  a.stroke();
+}
+      // Vẽ khung chọn (rect) lên trên cùng
+      if(alsoDrawSel && selRect){
+        const r = normRect(selRect);
+        a.save();
+        a.globalCompositeOperation = 'source-over';
+        a.globalAlpha = 0.9;
+        a.setLineDash([10,8]);
+        a.lineWidth = 2;
+        a.strokeStyle = '#888888';
+        a.strokeRect(r.x, r.y, r.w, r.h);
+        // handles ở 4 góc
+        const hs = 10;
+        a.setLineDash([]);
+        a.fillStyle = '#888888';
+        a.fillRect(r.x - hs/2, r.y - hs/2, hs, hs);
+        a.fillRect(r.x + r.w - hs/2, r.y - hs/2, hs, hs);
+        a.fillRect(r.x - hs/2, r.y + r.h - hs/2, hs, hs);
+        a.fillRect(r.x + r.w - hs/2, r.y + r.h - hs/2, hs, hs);
+        a.restore();
+      }
+
+      a.restore();
+    }
+function bboxFromTextObj(t){
+  const fs = t.fontSize || 44;
+  const lh = fs * 1.2;
+  const lines = String(t.text || '').split('\n');
+
+  a.save();
+  a.font = fs + 'px Arial';
+  let w = 0;
+  for(let i=0;i<lines.length;i++){
+    const line = lines[i] || '';
+    let wi = 0;
+    try{ wi = a.measureText(line).width; }catch(_){ wi = line.length * fs * 0.6; }
+    if(wi > w) w = wi;
+  }
+  a.restore();
+
+  const h = Math.max(1, lines.length) * lh;
+  return {x:t.x, y:t.y, w:w, h:h};
+}
+
+function setTextPtsFromBBox(t){
+  const b = bboxFromTextObj(t);
+  t.bbox = {x:b.x, y:b.y, w:b.w, h:b.h};
+  // 4 góc để selection hit-test/move/scale
+  t.pts = [
+    {x:b.x, y:b.y},
+    {x:b.x+b.w, y:b.y},
+    {x:b.x+b.w, y:b.y+b.h},
+    {x:b.x, y:b.y+b.h}
+  ];
+}
+
+// ===== TEXT EDITOR (contenteditable overlay) =====
+const textEdit = document.getElementById('textEdit');
+let pendingTextPos = null; // {x,y} in canvas coords
+
+function openTextEditor(p){
+  if(!textEdit) return;
+  pendingTextPos = {x:p.x, y:p.y};
+
+  // đặt vị trí theo pixel màn hình (fixed)
+  const r = annoCanvas.getBoundingClientRect();
+  const px = r.left + (p.x * (r.width / annoCanvas.width));
+  const py = r.top  + (p.y * (r.height / annoCanvas.height));
+
+  const c = PAL()[colorIdx];
+  textEdit.style.left = Math.round(px) + 'px';
+  textEdit.style.top  = Math.round(py) + 'px';
+  textEdit.style.display = 'block';
+  textEdit.style.color = c.color;
+  textEdit.style.fontSize = (c.w ? 44 : 44) + 'px'; // giữ 44px như boardBo
+  textEdit.innerHTML = '';
+  textEdit.focus();
+
+  // select all nếu muốn gõ đè nhanh
+  try{ document.execCommand('selectAll', false, null); }catch(_){}
+}
+
+function closeTextEditor(){
+  if(!textEdit) return;
+  textEdit.style.display = 'none';
+  textEdit.innerHTML = '';
+  pendingTextPos = null;
+}
+
+function commitTextEditor(){
+  if(!pendingTextPos){ closeTextEditor(); return; }
+
+  var html = (textEdit.innerHTML || "");
+  html = html.replace(/\r\n/g, "\n");
+  html = html.replace(/<\/div>\s*<div>/gi, "<br>")
+             .replace(/<div>/gi, "")
+             .replace(/<\/div>/gi, "")
+             .replace(/<\/p>\s*<p>/gi, "<br>")
+             .replace(/<\/?p>/gi, "");
+  var t = html.replace(/<br\s*\/?>/gi, "\n");
+
+  t = t.replace(/&nbsp;/gi, " ")
+       .replace(/&amp;/gi, "&")
+       .replace(/&lt;/gi, "<")
+       .replace(/&gt;/gi, ">");
+  t = (t || "").replace(/[ \t]+$/g, "").replace(/\n+$/g, "");
+  if(!t){ closeTextEditor(); return; }
+
+  const obj = {
+    tool: 'text',
+    text: t,
+    x: pendingTextPos.x,
+    y: pendingTextPos.y,
+    fontSize: 44,
+    colorIdx: colorIdx,
+    alpha: 1
+  };
+  setTextPtsFromBBox(obj);
+  STROKES.push(obj);
+  pushHist();
+  redrawAnno(true);
+  saveAnno();
+
+  closeTextEditor();
+}
+
+// Enter = chốt (Shift+Enter = xuống dòng), Esc = hủy
+if(textEdit){
+  textEdit.addEventListener('keydown', function(ev){
+    ev = ev || window.event;
+    var key = ev.key || ev.keyCode;
+
+    if(key === 'Escape' || key === 27){
+      try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+      closeTextEditor();
+      return;
+    }
+    if((key === 'Enter' || key === 13) && !ev.shiftKey){
+      try{ ev.preventDefault(); ev.stopPropagation(); }catch(_){}
+      commitTextEditor();
+      return;
+    }
+  }, false);
+
+  // blur = chốt
+  textEdit.addEventListener('blur', function(){
+    setTimeout(function(){
+      if(textEdit.style.display !== 'none'){
+        commitTextEditor();
+      }
+    }, 0);
+  }, false);
+}
+
+
+    // ===== Select/Move/Delete/Hide (giống boardBo) =====
+    let selMode = false;
+    let selRect = null;       // {x0,y0,x1,y1}
+    const selIds = new Set(); // stroke indexes
+    let selecting = false;
+    let movingSel = false;
+    let lastMove = null;
+
+    function normRect(rr){
+      const x = Math.min(rr.x0, rr.x1);
+      const y = Math.min(rr.y0, rr.y1);
+      const w = Math.abs(rr.x1 - rr.x0);
+      const h = Math.abs(rr.y1 - rr.y0);
+      return {x,y,w,h};
+    }
+
+    // Corner-handle scale (mobile-friendly)
+    const HANDLE_R = 28; // bán kính bắt góc (toạ độ canvas)
+    let scalingSel = false;
+    let lastScaleDist = 0;
+
+    function dist(a,b){
+      const dx=a.x-b.x, dy=a.y-b.y;
+      return Math.hypot(dx,dy);
+    }
+    function rectCenter(r){
+      return {x: r.x + r.w/2, y: r.y + r.h/2};
+    }
+    function nearCornerHandle(p, r){
+      const corners = [
+        {x:r.x,     y:r.y},
+        {x:r.x+r.w, y:r.y},
+        {x:r.x,     y:r.y+r.h},
+        {x:r.x+r.w, y:r.y+r.h},
+      ];
+      for(const c of corners){
+        if(dist(p,c) <= HANDLE_R) return true;
+      }
+      return false;
+    }
+    function scaleSelectedRelative(s){
+      if(!selRect || !selIds.size) return;
+      const rr = normRect(selRect);
+      const c = rectCenter(rr);
+
+      for(const idx of selIds){
+        const st = STROKES[idx];
+        if(!st || !st.pts) continue;
+        if(st.tool==='text'){
+          st.x = c.x + (st.x - c.x) * s;
+          st.y = c.y + (st.y - c.y) * s;
+          st.fontSize = Math.max(10, (st.fontSize||44) * s);
+        }
+        for(const p of st.pts){
+          p.x = c.x + (p.x - c.x) * s;
+          p.y = c.y + (p.y - c.y) * s;
+        }
+        if(st.tool==='text'){
+          try{ setTextPtsFromBBox(st); }catch(_){ }
+        }
+      }
+      // scale lại rect chọn
+      selRect.x0 = c.x + (selRect.x0 - c.x) * s;
+      selRect.x1 = c.x + (selRect.x1 - c.x) * s;
+      selRect.y0 = c.y + (selRect.y0 - c.y) * s;
+      selRect.y1 = c.y + (selRect.y1 - c.y) * s;
+    }
+
+    function ptInRect(p, r){
+      return p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h;
+    }
+    function strokeHitsRect(st, r){
+      if(!st || !st.pts) return false;
+      for(const p of st.pts){
+        if(p && ptInRect(p, r)) return true;
+      }
+      return false;
+    }
+    function recomputeSelection(){
+      selIds.clear();
+      if(!selRect) return;
+      const r = normRect(selRect);
+      for(let i=0;i<STROKES.length;i++){
+        if(strokeHitsRect(STROKES[i], r)) selIds.add(i);
+      }
+    }
+    function clearSelection(){
+      selRect = null;
+      selIds.clear();
+      selecting = false;
+      movingSel = false;
+      scalingSel = false;
+      redrawAnno(true);
+    }
+    function moveSelected(dx, dy){
+      if(!selIds.size) return;
+      for(const idx of selIds){
+        const s = STROKES[idx];
+        if(!s || !s.pts) continue;
+        if(s.tool==='text'){
+          s.x += dx; s.y += dy;
+        }
+        for(const p of s.pts){
+          p.x += dx; p.y += dy;
+        }
+        if(s.tool==='text'){
+          try{ setTextPtsFromBBox(s); }catch(_){ }
+        }
+      }
+      if(selRect){
+        selRect.x0 += dx; selRect.x1 += dx;
+        selRect.y0 += dy; selRect.y1 += dy;
+      }
+    }
+
+    // tool: pen | erase | hl
+    let tool = 'pen';
+    const ERASER_W = 30; // độ rộng tẩy // độ rộng tẩy
+    let dashOn = false;
+
+    // K:đen, B:xanh, R:đỏ, H:highlight xám
+    // 3 màu cố định: K/B/R (base) + palette khi invert (K'/Y/C) giống boardBo
+    const COLORS_BASE = [
+      {key:'K', tool:'pen', color:'#666666', w:6, alpha:1},
+      {key:'B', tool:'pen', color:'#001373', w:6, alpha:1},
+      {key:'R', tool:'pen', color:'#731300', w:6, alpha:1},
+    ];
+    const COLORS_INV = [
+      {key:'K', tool:'pen', color:'#999999', w:6, alpha:1},
+      {key:'B', tool:'pen', color:'#FFEC8C', w:6, alpha:1},
+      {key:'R', tool:'pen', color:'#8CECFF', w:6, alpha:1},
+    ];
+    let invertMode = false;
+    let colorIdx = 0;
+    const PAL = ()=> (invertMode ? COLORS_INV : COLORS_BASE);
+
+
+    const pageNoEl = document.getElementById('pageNo');
+    const pageKey = () => `anno:${location.pathname}:${location.search}:p${Number(pageNoEl?.value||1)}`;
+    const strokesKey = () => pageKey() + ':strokes';
+
+    function applyColorUI(){
+      const c = PAL()[colorIdx];
+      const btn = document.getElementById('colorBtn');
+      if (btn) btn.textContent = c.key;
+      if (tool !== 'erase') tool = c.tool; // chọn H sẽ tự sang highlight
+    }
+
+    // Nút đổi màu (K/B/R) - vòng 3 màu
+    const __colorBtn = document.getElementById('colorBtn');
+    if(__colorBtn){
+      __colorBtn.addEventListener('click', ()=>{
+        colorIdx = (colorIdx + 1) % PAL().length;
+        // đảm bảo đang ở bút (không bị kẹt ở tẩy)
+        tool = 'pen';
+        applyColorUI();
+      });
+    }
+
+
+    function saveAnno(){
+      // Lưu PNG + JSON strokes (để move/xóa/hide giống boardBo)
+      try{ localStorage.setItem(pageKey(), annoCanvas.toDataURL('image/png')); }catch(e){}
+      try{ localStorage.setItem(strokesKey(), JSON.stringify(STROKES)); }catch(e){}
+    }
+    function loadAnno(){
+      a.clearRect(0,0,annoCanvas.width,annoCanvas.height);
+      STROKES.length = 0;
+
+      let ok = false;
+      try{
+        const js = localStorage.getItem(strokesKey());
+        if(js){
+          const arr = JSON.parse(js);
+          if(Array.isArray(arr)){
+            for(const s of arr){
+              STROKES.push(s);
+              if(s && s.tool==='text'){ try{ setTextPtsFromBBox(s); }catch(_){ } }
+            }
+            ok = true;
+          }
+        }
+      }catch(e){}
+
+      if(ok){
+        redrawAnno(true);
+        return;
+      }
+
+      // fallback PNG (file cũ)
+      const url = localStorage.getItem(pageKey());
+      if(!url) return;
+      const img = new Image();
+      img.onload = () => a.drawImage(img,0,0);
+      img.src = url;
+    }
+    function clearAnno(){
+      selRect = null; selIds.clear();
+      STROKES.length = 0;
+      a.clearRect(0,0,annoCanvas.width,annoCanvas.height);
+      localStorage.removeItem(pageKey());
+      localStorage.removeItem(strokesKey());
+    }
+
+    function syncToPdfCanvas(){
+      const w = pdfCanvas.width, h = pdfCanvas.height;
+      if(!w || !h) return;
+      annoCanvas.width = w; annoCanvas.height = h;
+      loadAnno();
+    }
+
+    // ===== drawing =====
+    let drawing=false, last=null;
+    let drawingShape = false;
+    let shapeStart = null;
+    let shapeTemp = null; // {kind:'line'|'rect'|'ellipse', x0,y0,x1,y1}
+    function getPos(ev){
+      const r = annoCanvas.getBoundingClientRect();
+      const x = (ev.clientX - r.left) * (annoCanvas.width / r.width);
+      const y = (ev.clientY - r.top)  * (annoCanvas.height / r.height);
+      return {x,y};
+    }
+
+    function drawTempShape(s){
+      if(!s) return;
+      a.save();
+      a.setTransform(1,0,0,1,0,0);
+      a.globalCompositeOperation = 'source-over';
+      const c = PAL()[colorIdx];
+      a.globalAlpha = c.alpha ?? 1;
+      a.strokeStyle = c.color;
+      a.lineWidth = c.w;
+      a.lineCap = 'round';
+      a.lineJoin = 'round';
+      a.setLineDash(dashOn ? [10,8] : []);
+      const x = Math.min(s.x0, s.x1);
+      const y = Math.min(s.y0, s.y1);
+      const w = Math.abs(s.x1 - s.x0);
+      const h = Math.abs(s.y1 - s.y0);
+
+      a.beginPath();
+      if(s.kind === 'line'){
+        a.moveTo(s.x0, s.y0);
+        a.lineTo(s.x1, s.y1);
+      }else if(s.kind === 'rect'){
+        a.rect(x,y,w,h);
+      }else if(s.kind === 'ellipse'){
+        const cx = x + w/2, cy = y + h/2;
+        a.ellipse(cx, cy, Math.max(1,w/2), Math.max(1,h/2), 0, 0, Math.PI*2);
+      }
+      a.stroke();
+      a.restore();
+    }
+
+    function start(ev){
+      const p = getPos(ev);
+
+      if(selMode){
+        // click ngoài vùng -> bỏ chọn
+        if(selRect){
+          const r = normRect(selRect);
+          if(!ptInRect(p, r)){
+            clearSelection();
+          }
+        }
+
+        // nếu click trong vùng và có selection: gần góc -> SCALE, còn lại -> MOVE
+        if(selRect){
+          const r = normRect(selRect);
+          if(ptInRect(p, r) && selIds.size){
+            if(nearCornerHandle(p, r)){
+              scalingSel = true;
+              movingSel = false;
+              lastMove = null;
+              const c = rectCenter(r);
+              lastScaleDist = Math.max(1, dist(p, c));
+              ev.preventDefault();
+              return;
+            }else{
+              movingSel = true;
+              scalingSel = false;
+              lastMove = p;
+              ev.preventDefault();
+              return;
+            }
+          }
+        }
+
+        selecting = true;
+        selRect = {x0:p.x, y0:p.y, x1:p.x, y1:p.y};
+        recomputeSelection();
+        redrawAnno(true);
+        ev.preventDefault();
+        return;
+      }
+
+// ===== TEXT START =====
+if(tool==='text'){
+  openTextEditor(p);
+  ev.preventDefault();
+  return;
+}
+
+// ===== SHAPE START (line/rect/ellipse) =====
+      if(tool==='line' || tool==='rect' || tool==='ellipse'){
+        drawingShape = true;
+        shapeStart = p;
+        shapeTemp = {kind: tool, x0:p.x, y0:p.y, x1:p.x, y1:p.y};
+        redrawAnno(true);
+        drawTempShape(shapeTemp);
+        ev.preventDefault();
+        return;
+      }
+
+drawing=true; last=p;
+      beginStroke((tool==='erase')?'erase':'pen', last.x, last.y);
+      ev.preventDefault();
+    }
+    function move(ev){
+      const p = getPos(ev);
+
+      if(drawingShape && shapeTemp){
+        shapeTemp.x1 = p.x; shapeTemp.y1 = p.y;
+        redrawAnno(true);
+        drawTempShape(shapeTemp);
+        ev.preventDefault();
+        return;
+      }
+
+
+      if(selMode){
+        if(scalingSel){
+          const r = normRect(selRect);
+          const c = rectCenter(r);
+          const d1 = Math.max(1, dist(p, c));
+          const s = d1 / Math.max(1, lastScaleDist);
+          const ss = Math.min(3, Math.max(0.33, s));
+          scaleSelectedRelative(ss);
+          lastScaleDist = d1;
+          redrawAnno(true);
+          ev.preventDefault();
+          return;
+        }
+        if(movingSel){
+          const dx = p.x - lastMove.x;
+          const dy = p.y - lastMove.y;
+          moveSelected(dx, dy);
+          lastMove = p;
+          redrawAnno(true);
+          ev.preventDefault();
+          return;
+        }
+        if(selecting && selRect){
+          selRect.x1 = p.x; selRect.y1 = p.y;
+          recomputeSelection();
+          redrawAnno(true);
+          ev.preventDefault();
+          return;
+        }
+        return;
+      }
+
+      if(!drawing) return;
+
+      addPoint(p.x,p.y);
+      a.lineCap='round'; a.lineJoin='round';
+      a.setLineDash(dashOn ? [10,8] : []);
+
+      if(tool==='erase'){
+        a.globalCompositeOperation='destination-out';
+        a.globalAlpha = 1;
+        a.strokeStyle='rgba(0,0,0,1)';
+        a.lineWidth=ERASER_W;
+      }else{
+        const c = PAL()[colorIdx];
+        a.globalCompositeOperation='source-over';
+        a.globalAlpha = (tool==='hl') ? c.alpha : 1;
+        a.strokeStyle = c.color;
+        a.lineWidth = c.w;
+      }
+
+      a.beginPath();
+      a.moveTo(last.x,last.y);
+      a.lineTo(p.x,p.y);
+      a.stroke();
+      last=p;
+      ev.preventDefault();
+    }
+    
+    function shapeStrokeFromTemp(s){
+      const c = PAL()[colorIdx];
+      const st = { tool:'shape', shape:s.kind, colorIdx, w:c.w, alpha:(c.alpha ?? 1), dash:!!dashOn, pts:[] };
+      const x = Math.min(s.x0, s.x1);
+      const y = Math.min(s.y0, s.y1);
+      const w = Math.abs(s.x1 - s.x0);
+      const h = Math.abs(s.y1 - s.y0);
+
+      if(s.kind === 'line'){
+        st.pts = [{x:s.x0,y:s.y0},{x:s.x1,y:s.y1}];
+      }else if(s.kind === 'rect'){
+        st.pts = [
+          {x:x, y:y},
+          {x:x+w, y:y},
+          {x:x+w, y:y+h},
+          {x:x, y:y+h},
+          {x:x, y:y}
+        ];
+      }else if(s.kind === 'ellipse'){
+        const cx = x + w/2, cy = y + h/2;
+        const rx = Math.max(1,w/2), ry = Math.max(1,h/2);
+        const N = 18;
+        const pts = [];
+        for(let i=0;i<=N;i++){
+          const t = (i/N) * Math.PI*2;
+          pts.push({x: cx + rx*Math.cos(t), y: cy + ry*Math.sin(t)});
+        }
+        st.pts = pts;
+      }
+      return st;
+    }
+
+function end(){
+      if(drawingShape && shapeTemp){
+        // ignore too small shapes
+        const dx = Math.abs(shapeTemp.x1 - shapeTemp.x0);
+        const dy = Math.abs(shapeTemp.y1 - shapeTemp.y0);
+        drawingShape = false;
+        const tmp = shapeTemp;
+        shapeTemp = null;
+        shapeStart = null;
+
+        if(dx > 3 || dy > 3){
+          try{ pushHist(); }catch(e){}
+          try{ STROKES.push(shapeStrokeFromTemp(tmp)); }catch(e){}
+          redrawAnno(true);
+          saveAnno();
+          try{ pushHist(); }catch(e){}
+        }else{
+          redrawAnno(true);
+        }
+        return;
+      }
+
+      if(selMode){
+        if(movingSel || selecting){
+          movingSel = false;
+          scalingSel = false;
+          selecting = false;
+
+          if(selRect){
+            const r = normRect(selRect);
+            if(r.w < 5 || r.h < 5){
+              clearSelection();
+            }else{
+              recomputeSelection();
+              redrawAnno(true);
+            }
+          }
+          pushHist();
+          saveAnno();
+        }
+        return;
+      }
+
+      if(!drawing) return;
+      endStroke();
+      drawing=false; last=null;
+      saveAnno(); // auto-save
+    }
+
+    annoCanvas.addEventListener('pointerdown', start, {passive:false});
+    annoCanvas.addEventListener('pointermove', move, {passive:false});
+    window.addEventListener('pointerup', end);
+
+    
+    // ===== controls =====
+    document.getElementById('toolPen')?.addEventListener('click', ()=>{ tool = PAL()[colorIdx].tool; try{ applyColorUI(); }catch(_){} });
+    document.getElementById('toolText')?.addEventListener('click', ()=>{ tool = 'text'; selMode=false; clearSelection(); });
+    document.getElementById('toolErase')?.addEventListener('click', ()=>{ tool = 'erase'; const b=document.getElementById('colorBtn'); if(b) b.textContent='🧽'; });
+    document.getElementById('toolLine')?.addEventListener('click', ()=>{ tool = 'line'; selMode=false; clearSelection(); });
+    document.getElementById('toolRect')?.addEventListener('click', ()=>{ tool = 'rect'; selMode=false; clearSelection(); });
+    document.getElementById('toolEllipse')?.addEventListener('click', ()=>{ tool = 'ellipse'; selMode=false; clearSelection(); });
+    document.getElementById('dashToggle')?.addEventListener('change', (e)=>{
+      dashOn = !!e.target.checked;
+    });
+
+    // Undo/Redo buttons (index step1)
+    document.getElementById('undoBtn')?.addEventListener('click', ()=>doUndo());
+    document.getElementById('redoBtn')?.addEventListener('click', ()=>doRedo());
+
+    // Make dash label toggle checkbox (since input is visually hidden)
+    const dashLbl = document.querySelector('#annoBar .chk');
+    if(dashLbl){
+      dashLbl.addEventListener('click', ()=>{
+        const cb = document.getElementById('dashToggle');
+        if(cb){
+          cb.checked = !cb.checked;
+          cb.dispatchEvent(new Event('change', {bubbles:true}));
+        }
+      });
+    }
+
+
+    // Select mode (rect)
+    const selectBtn = document.getElementById('selectBtn');
+    if(selectBtn){
+      selectBtn.addEventListener('click', ()=>{
+        selMode = !selMode;
+        drawing = false; selecting = false; movingSel = false;
+        selectBtn.style.background = selMode ? '#ddd' : '';
+        if(!selMode) clearSelection();
+      });
+    }
+
+    // Hide/Show note
+    const toggleNoteBtn = document.getElementById('toggleNoteBtn');
+    let noteVisible = true;
+    if(toggleNoteBtn){
+      toggleNoteBtn.addEventListener('click', ()=>{
+        noteVisible = !noteVisible;
+        annoCanvas.style.display = noteVisible ? 'block' : 'none';
+        if(!noteVisible){
+          selMode = false;
+          if(selectBtn) selectBtn.style.background = '';
+          clearSelection();
+        }else{
+          redrawAnno(true);
+        }
+      });
+    }
+
+    // Trash: nếu có vùng chọn -> xóa nhóm; nếu không -> xóa trang
+    document.getElementById('clearAnno')?.addEventListener('click', ()=>{
+      try{ pushHist(); }catch(e){}
+      if(selRect && selIds.size){
+        const keep = [];
+        for(let i=0;i<STROKES.length;i++){
+          if(!selIds.has(i)) keep.push(STROKES[i]);
+        }
+        STROKES.length = 0;
+        for(const s of keep) STROKES.push(s);
+        pushHist();
+        clearSelection();
+        redrawAnno(true);
+        saveAnno();
+      }else{
+        clearAnno();
+      }
+    });
+
+    // đổi trang => load đúng trang
+
+    pageNoEl?.addEventListener('change', ()=>loadAnno());
+    document.getElementById('prev')?.addEventListener('click', ()=>setTimeout(loadAnno,0));
+    document.getElementById('next')?.addEventListener('click', ()=>setTimeout(loadAnno,0));
+
+    // hook cho app.js gọi sau mỗi lần render
+    window.__annoSync = syncToPdfCanvas;
+
+    // Cho nút 🌗 điều khiển palette note (giống boardBo)
+    window.__annoSetInvert = (on)=>{ invertMode = !!on; applyColorUI(); redrawAnno(true); };
+
+    applyColorUI();
+    setTimeout(syncToPdfCanvas,0);
+    // initial history baseline
+    try{ pushHist(); }catch(e){}
+
+
+
+    // ===== EXPORT: gộp PDF + chú thích (flatten) =====
+    async function exportFlattenedPdf(){
+      const btn = document.getElementById('exportPdf');
+      if(btn){ btn.disabled = true; btn.textContent = '...'; }
+      try{
+        if(!window.PDFLib) throw new Error('Thiếu PDFLib (pdf-lib).');
+        const pdfUrl = (window.__pdfn && window.__pdfn.getPdfUrl) ? window.__pdfn.getPdfUrl() : null;
+        if(!pdfUrl) throw new Error('Không lấy được URL PDF hiện tại.');
+        const ab = await fetch(pdfUrl).then(r=>{
+          if(!r.ok) throw new Error('Không tải được PDF: HTTP ' + r.status);
+          return r.arrayBuffer();
+        });
+
+        const pdfjsDoc = (window.__pdfn && window.__pdfn.getPdfDoc) ? window.__pdfn.getPdfDoc() : null;
+        if(!pdfjsDoc) throw new Error('PDF chưa sẵn sàng. Hãy đợi PDF render xong rồi thử lại.');
+
+        const { PDFDocument } = window.PDFLib;
+        const outPdf = await PDFDocument.create();
+
+        for(let pnum=1; pnum<=pdfjsDoc.numPages; pnum++){
+          const page = await pdfjsDoc.getPage(pnum);
+
+          const base = page.getViewport({scale:1});
+          const sW = 1600 / base.width;   // mục tiêu ~1600px ngang
+          const scale = Math.max(1.0, Math.min(2.0, sW));
+
+          const vp = page.getViewport({scale});
+          const off = document.createElement('canvas');
+          off.width = Math.floor(vp.width);
+          off.height = Math.floor(vp.height);
+          const offCtx = off.getContext('2d');
+
+          await page.render({canvasContext: offCtx, viewport: vp}).promise;
+
+          const key = `anno:${location.pathname}:${location.search}:p${pnum}`;
+          const annoUrl = localStorage.getItem(key);
+          if(annoUrl){
+            await new Promise((res)=>{
+              const img = new Image();
+              img.onload = ()=>{ 
+                offCtx.drawImage(img, 0, 0, off.width, off.height);
+                res();
+              };
+              img.onerror = ()=>res();
+              img.src = annoUrl;
+            });
+          }
+
+          const pngDataUrl = off.toDataURL('image/png');
+          const pngBytes = await fetch(pngDataUrl).then(r=>r.arrayBuffer());
+          const png = await outPdf.embedPng(pngBytes);
+
+          const pageOut = outPdf.addPage([off.width, off.height]);
+          pageOut.drawImage(png, { x:0, y:0, width: off.width, height: off.height });
+        }
+
+        const outBytes = await outPdf.save();
+        const blob = new Blob([outBytes], {type:'application/pdf'});
+        const aEl = document.createElement('a');
+        aEl.href = URL.createObjectURL(blob);
+        aEl.download = 'annotated.pdf';
+        document.body.appendChild(aEl);
+        aEl.click();
+        aEl.remove();
+        setTimeout(()=>URL.revokeObjectURL(aEl.href), 2000);
+      }catch(err){
+        console.error(err);
+        alert('Xuất PDF thất bại: ' + (err && err.message ? err.message : err));
+      }finally{
+        const btn = document.getElementById('exportPdf');
+        if(btn){ btn.disabled = false; btn.textContent = '⬇️PDF'; }
+      }
+    }
+
+    document.getElementById('exportPdf')?.addEventListener('click', exportFlattenedPdf);
+
+  })();
+  </script>
+
+  <script src="app.js"></script>
+
+<script>
+(() => {
+  const invertBtn = document.getElementById('invertBtn');
+  const pdfCanvas = document.getElementById('c'); // PDF canvas
+  if(!invertBtn || !pdfCanvas) return;
+
+  let on = false;
+  invertBtn.addEventListener('click', () => {
+    on = !on;
+
+    // 1) Invert PDF (CSS filter chỉ áp lên PDF canvas)
+    pdfCanvas.classList.toggle('invert', on);
+
+    // 2) Invert màu NOTE theo palette (K/B/R ↔ K'/Y/C)
+    if(window.__annoSetInvert) window.__annoSetInvert(on);
+  });
+})();
+(() => {
+  const noteToggleBtn = document.getElementById('noteToggleBtn');
+  const annoBar       = document.getElementById('annoBar');
+  const noteCanvas    = document.getElementById('anno'); // patched: dùng canvas #anno
+
+  if(!noteToggleBtn || !annoBar || !noteCanvas) return;
+
+  let enabled = false;
+
+  function setEnabled(on){
+    enabled = !!on;
+    noteToggleBtn.classList.toggle('active', enabled);
+
+    // mở/đóng danh sách nút
+    annoBar.classList.toggle('show', enabled);
+
+    // bật/tắt nhận vẽ
+    noteCanvas.style.pointerEvents = enabled ? 'auto' : 'none';
+  }
+
+  noteToggleBtn.addEventListener('click', () => setEnabled(!enabled));
+
+  // trạng thái ban đầu
+  setEnabled(false);
+   // gán fullscreen vào nút này
+})();
+</script>
+<script>
+(() => {
+  const btn = document.getElementById('noteToggleBtn');
+  if(!btn) return;
+
+  // ===== FULLSCREEN CORE =====
+  function toggleFullscreen() {
+    if (document.fullscreenElement) exitFullscreen();
+    else enterFullscreen();
+  }
+  function enterFullscreen() {
+    const elem = document.documentElement;
+    if (elem.requestFullscreen) elem.requestFullscreen();
+    else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+    else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+  }
+  function exitFullscreen() {
+    if (document.exitFullscreen) document.exitFullscreen();
+    else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    else if (document.msExitFullscreen) document.msExitFullscreen();
+  }
+
+  // ===== DESKTOP: double click =====
+  btn.addEventListener('dblclick', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleFullscreen();
+  });
+
+  // ===== MOBILE: double tap (chặn double-tap zoom trên nút) =====
+  let lastTap = 0;
+  let lastPos = null;
+  const DELAY = 350;      // ms
+  const MAX_DIST = 24;    // px (tọa độ client)
+
+  btn.addEventListener('touchend', (e) => {
+    // chỉ xử lý khi thật sự là touch
+    if (!e.changedTouches || !e.changedTouches.length) return;
+
+    const t = e.changedTouches[0];
+    const now = Date.now();
+    const pos = {x: t.clientX, y: t.clientY};
+
+    const dist = (a,b)=> Math.hypot(a.x-b.x, a.y-b.y);
+
+    if (now - lastTap < DELAY && lastPos && dist(pos, lastPos) < MAX_DIST) {
+      // tap thứ 2 -> fullscreen + chặn zoom
+      e.preventDefault();       // IMPORTANT: cần passive:false
+      e.stopPropagation();
+      lastTap = 0;
+      lastPos = null;
+      toggleFullscreen();
+      return;
+    }
+
+    lastTap = now;
+    lastPos = pos;
+  }, {passive:false});
+})();
+</script>
+
+<script>
+(function(){
+  // helpers
+  function $(id){ return document.getElementById(id); }
+  var annoBar = $('annoBar');
+  if(!annoBar) return;
+
+  var colorBtn = $('colorBtn');
+  var toolErase = $('toolErase');
+
+  var noteModeBtn = $('noteModeBtn');
+  var noteModePanel = $('noteModePanel');
+
+  var noteMenuBtn = $('noteMenuBtn');
+  var noteMenuPanel = $('noteMenuPanel');
+
+  var toolPen = $('toolPen');
+  var toolText = $('toolText');
+  var toolLine = $('toolLine');
+  var toolRect = $('toolRect');
+  var toolEllipse = $('toolEllipse');
+
+  var toggleNoteBtn = $('toggleNoteBtn');
+
+  function prevent(ev){
+    try{ ev && ev.preventDefault && ev.preventDefault(); ev && ev.stopPropagation && ev.stopPropagation(); }catch(_){}
+  }
+
+  // tap/hold (giống BoardT)
+  function bindTapHold(el, onTap, onHold){
+    if(!el) return;
+    var t=null, held=false, ignoreClick=false;
+
+    function clear(){ if(t){ clearTimeout(t); t=null; } }
+    function down(ev){
+      held=false; ignoreClick=false; clear(); prevent(ev);
+      try{ if(el.setPointerCapture && ev && ev.pointerId!=null) el.setPointerCapture(ev.pointerId); }catch(_){}
+      t=setTimeout(function(){
+        held=true; ignoreClick=true;
+        if(onHold) onHold(ev);
+      }, 450);
+    }
+    function up(ev){
+      clear(); prevent(ev);
+      if(!held && onTap) onTap(ev);
+    }
+    function cancel(){ clear(); }
+    function clickBlock(ev){
+      if(ignoreClick){
+        prevent(ev);
+        ignoreClick=false;
+        return false;
+      }
+    }
+    el.addEventListener('pointerdown', down, {passive:false});
+    el.addEventListener('pointerup', up, {passive:false});
+    el.addEventListener('pointercancel', cancel, false);
+    el.addEventListener('pointerleave', cancel, false);
+    el.addEventListener('click', clickBlock, true);
+    el.addEventListener('contextmenu', function(ev){ prevent(ev); }, false);
+  }
+
+  function hidePanels(){
+    if(noteModePanel) noteModePanel.classList.add('hidden');
+    if(noteMenuPanel) noteMenuPanel.classList.add('hidden');
+  }
+  function togglePanel(panel){
+    if(!panel) return;
+    var isHidden = panel.classList.contains('hidden');
+    hidePanels();
+    if(isHidden) panel.classList.remove('hidden');
+  }
+
+  // mode icon
+  function setModeIcon(mode){
+    if(!noteModeBtn) return;
+    var iconMap = { pen:'✍️', text:'T', line:'／', rect:'▭', ellipse:'◯' };
+    noteModeBtn.textContent = iconMap[mode] || '✍️';
+  }
+
+  // Color: tap = cycle color (logic cũ trên colorBtn), hold = eraser (trigger toolErase)
+  bindTapHold(colorBtn, function(){
+    // tap: dùng logic cũ (colorBtn click đã có sẵn)
+    try{ colorBtn.click(); }catch(_){}
+    // đảm bảo đang ở pen (nếu trước đó eraser)
+    try{ if(toolPen) toolPen.click(); }catch(_){}
+    setModeIcon('pen');
+    hidePanels();
+  }, function(){
+    try{ if(toolErase) toolErase.click(); }catch(_){}
+    setModeIcon('pen');
+    hidePanels();
+  });
+
+  // Mode: tap mở panel
+  bindTapHold(noteModeBtn, function(){ togglePanel(noteModePanel); }, null);
+
+  function bindMode(btn, mode){
+    if(!btn) return;
+    btn.addEventListener('click', function(ev){
+      prevent(ev);
+      try{ btn.click && btn.click(); }catch(_){}
+      setModeIcon(mode);
+      hidePanels();
+    }, false);
+  }
+  // NOTE: toolPen/toolText/toolLine/toolRect/toolEllipse đã có handler sẵn,
+  // ở đây chỉ cập nhật icon + đóng panel.
+  if(toolPen) toolPen.addEventListener('click', function(){ setModeIcon('pen'); hidePanels(); }, true);
+  if(toolText) toolText.addEventListener('click', function(){ setModeIcon('text'); hidePanels(); }, true);
+  if(toolLine) toolLine.addEventListener('click', function(){ setModeIcon('line'); hidePanels(); }, true);
+  if(toolRect) toolRect.addEventListener('click', function(){ setModeIcon('rect'); hidePanels(); }, true);
+  if(toolEllipse) toolEllipse.addEventListener('click', function(){ setModeIcon('ellipse'); hidePanels(); }, true);
+
+  // Menu: tap mở panel / hold: toggle hide/show note (👁️)
+  bindTapHold(noteMenuBtn, function(){
+    togglePanel(noteMenuPanel);
+  }, function(){
+    // hold: toggle note visibility (nếu có)
+    try{ if(toggleNoteBtn) toggleNoteBtn.click(); }catch(_){}
+    hidePanels();
+  });
+
+  // click ngoài -> đóng panel (khi đang bật annoBar)
+  document.addEventListener('pointerdown', function(ev){
+    try{
+      if(!annoBar.classList.contains('show')) return;
+      var t = ev.target;
+      if(annoBar.contains(t)) return;
+      hidePanels();
+    }catch(_){}
+  }, {passive:true});
+
+  // khi mở annoBar lần đầu: set icon về pen
+  setModeIcon('pen');
+})();
+</script>
+</body>
+</html>
