@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="./jquery/jquery.min.js"></script>
+
+  <script src="./jquery/jquery-ui.min.js"></script>
+  <link rel="stylesheet" href="./jquery/base.css">
+  <link rel="stylesheet" href="./jquery/jquery-ui.css">
+<script>
+/* You can edit this list:
+   - url: file to open in the main object (#fd)
+   - text: optional MD/LaTeX shown in #auxText (empty => hidden)
+*/
+window.__DOT_LINKS__ = [
+  { url: "https://q.me-qr.com/x68ijayn", text: "### Ghi chú\n$\\int_a^b f(x)dx = F(b)-F(a)$" }  // placeholder 00 (you can replace)
+  // { url: "bai1.html", text: "### Ghi chú\n$\\int_a^b f(x)dx = F(b)-F(a)$" },
+  // { url: "bai2.html", text: "" }
+];
+</script>
+<style>
+
+        body{
+  margin:0;
+  padding:0;
+  width:100%;
+  height:100vh;
+  background:#f0f0f0;
+  overflow:hidden;
+}
+        
+        .popup {
+            position: fixed;
+            background: white;
+            
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+            transition: transform 0.1s ease-in-out;
+            z-index: 700;
+        }
+        
+        /* Khi màn hình ngang (popup bên phải) */
+        @media (orientation: landscape) {
+            .popup {
+                top: 0;
+                right: 0;
+                width: 50%; 
+min-width:5%;
+max-width:95%;
+                height: 100vh;
+                transform: translateX(100%);
+            }
+}
+        
+        /* Khi màn hình dọc (popup phía dưới) */
+        @media (orientation: portrait) {
+            .popup {
+                bottom: 0;
+                left: 0;
+                width: 100%;
+                height: 50vh;
+max-height:95vh;
+min-height:5vh;
+                transform: translateY(100%);
+            }
+
+        }
+        
+        .popup.show {
+            transform: translateX(0) translateY(0);
+        }
+        
+        .resize-handle {
+            position: absolute;
+            background: grey;
+            cursor: pointer;
+            z-index: 500;
+        }
+        
+        
+        .line {
+    scrollbar-width: none; /* Ẩn scrollbar trong Firefox */
+    -ms-overflow-style: none; /* Ẩn scrollbar trong IE và Edge */
+}
+
+.line::-webkit-scrollbar {
+    display: none; /* Ẩn scrollbar trong Chrome, Safari */
+}
+
+
+
+ 
+
+    
+
+/* Main clip/image pinned to viewport top-left */
+#ggb{
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 1;
+  overflow: hidden;
+}
+#ggb #mainImg{
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  object-fit: contain;
+  object-position: left top;
+  display:block;
+}
+
+
+/* ===== Popup & resize handles (mobile-safe) ===== */
+#popup.popup{ z-index: 9999; touch-action: none; }
+.resize-handle{ position:absolute; z-index: 10000; touch-action: none; }
+
+/* ===== Mobile-friendly resize handles (inside popup, easy to grab) ===== */
+.resize-handle.top{
+  position:absolute;
+  top: 0;
+  right: 0;
+  transform: translateX(-50%);
+  width: 36px;
+  height: 24px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.18);
+  cursor: ns-resize;
+  touch-action: none;
+}
+.resize-handle.left{
+  position:absolute;
+  left: 0;
+  bottom: 0;
+  transform: translateY(-50%);
+  width: 24px;
+  height: 36px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.18);
+  cursor: ew-resize;
+  touch-action: none;
+}
+/* Make sure popup can receive pointer events */
+#popup{ touch-action:none; }
+
+
+
+/* Quick toggle button inside popup */
+#quick90Btn.quick90{
+  position:absolute;
+  top:0px;
+  left:0px;
+  z-index: 11000;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(0,0,0,0.25);
+  background: rgba(255,255,255,0.85);
+  font-size: 18px;
+  line-height: 34px;
+  padding: 0;
+  cursor: pointer;
+  user-select: none;
+}
+#quick90Btn.quick90:active{ transform: scale(0.98); }
+
+
+/* ===== Dot link nav + aux text (kept minimal; does not change main layout) ===== */
+.popup-content{ position: relative; width:100%; height:100%; }
+#dotNav{
+  position:absolute;
+  display:flex;
+  gap:6px;
+  z-index:11050;
+  user-select:none;
+}
+#dotNav .dotBtn{
+  width:28px;
+  height:28px;
+  border-radius:14px;
+  border:1px solid rgba(0,0,0,0.28);
+  background:rgba(255,255,255,0.85);
+  font-size:12px;
+  line-height:28px;
+  padding:0;
+  cursor:pointer;
+}
+#dotNav .dotBtn:active{ transform: scale(0.98); }
+#dotNav .dotBtn.active{
+  border-color: rgba(0,0,0,0.55);
+  box-shadow: 0 0 0 2px rgba(0,0,0,0.10) inset;
+}
+#auxText{
+  position:absolute;
+  display:none;
+  z-index:11040;
+  background:rgba(255,255,255,0.95);
+  border:1px solid rgba(0,0,0,0.18);
+  border-radius:10px;
+  padding:8px 10px;
+
+  width:fit-content;
+  max-width:92vw;
+  max-height:80vh;
+  overflow:auto;
+
+  font-size:14px;
+  line-height:1.45;
+  white-space:normal;
+  overflow-wrap:anywhere;
+
+  direction:ltr;
+  text-align:left;
+  writing-mode:horizontal-tb;
+  unicode-bidi: plaintext;
+}
+
+/* giảm “khoảng trống” do markdown header/paragraph */
+
+#auxText{ top:28px; left:28px; }
+
+/* Placement rules */
+@media (orientation: landscape){
+  /* left + bottom */
+  #dotNav{ left:8px; bottom:8px; flex-direction:column; }
+ 
+}
+
+@media (orientation: portrait){
+  /* top + right */
+  #dotNav{ top:8px; right:8px; flex-direction:row; }
+ 
+}
+
+</style>
+</head>
+<body>
+   <div id="ggb">
+    <object id="fd" data="" class="line"  style="width:100%; height:100%; object-fit:cover;; display:none;"></object>
+  <div id="dotNav" aria-label="Link dots"></div>
+</div>
+
+
+
+    <div id="popup" class="popup show">
+
+        
+        <div class="popup-content">
+           
+  <div id="auxText"></div>
+
+  <button id="quick90Btn" class="quick90" type="button" title="Mở nhanh 90%">▣</button>
+
+        </div>
+        <div class="resize-handle top"></div>
+        <div class="resize-handle left"></div>
+    </div>
+   </div>
+    
+
+
+  
+
+
+ 
+
+
+
+<script>
+/* ===== Popup resize + reset on rotate (no fullscreen) + MIN = remaining ===== */
+(function(){
+  const popup = document.getElementById('popup');
+  const handleTop = document.querySelector('.resize-handle.top');
+  const handleLeft = document.querySelector('.resize-handle.left');
+  const img = document.getElementById('mainImg');
+  const ggb = document.getElementById('ggb');
+
+  if(!popup || !handleTop || !handleLeft) return;
+
+  let isResizing = false;
+  let startX = 0, startY = 0;
+  let startW = 0, startH = 0;
+  let dir = null;
+  let moveHandler = null;
+
+  function isPortrait(){
+    return window.innerHeight > window.innerWidth;
+  }
+
+  function getDisplayedImageSize(){
+    // Compute the displayed image size under object-fit: contain in #ggb
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+
+    // fallback if image not ready
+    if(!img || !img.naturalWidth || !img.naturalHeight){
+      // Assume it can fill the shorter side; remaining min should not collapse
+      return { imgW: vw, imgH: vh, remainW: 120, remainH: 80 };
+    }
+
+    const iw = img.naturalWidth;
+    const ih = img.naturalHeight;
+
+    const scale = Math.min(vw / iw, vh / ih);
+    const imgW = Math.round(iw * scale);
+    const imgH = Math.round(ih * scale);
+
+    const remainW = Math.max(120, vw - imgW);
+    const remainH = Math.max(80, vh - imgH);
+    return { imgW, imgH, remainW, remainH };
+  }
+
+  function applyMinRemaining(force){
+    const { imgW, imgH, remainW, remainH } = getDisplayedImageSize();
+    if (isPortrait()){
+      // panel under the image
+      popup.style.left = "0";
+      popup.style.right = "0";
+      popup.style.top = "";
+      popup.style.bottom = "0";
+      popup.style.width = "100%";
+      if (force) popup.style.height = remainH + "px";
+      else {
+        // clamp current height
+        const curH = popup.getBoundingClientRect().height;
+        if (curH < remainH) popup.style.height = remainH + "px";
+      }
+      handleTop.style.display = "block";
+      handleLeft.style.display = "none";
+    } else {
+      // panel to the right of the image
+      popup.style.top = "0";
+      popup.style.bottom = "0";
+      popup.style.left = "";
+      popup.style.right = "0";
+      popup.style.height = "100vh";
+      if (force) popup.style.width = remainW + "px";
+      else {
+        const curW = popup.getBoundingClientRect().width;
+        if (curW < remainW) popup.style.width = remainW + "px";
+      }
+      handleLeft.style.display = "block";
+      handleTop.style.display = "none";
+    }
+    // store mins for dragging
+    popup.dataset.minw = String(remainW);
+    popup.dataset.minh = String(remainH);
+  }
+
+  // Quick open/close: toggle between MIN (remaining) and ~90% viewport
+  let quickIsMax = false;
+
+  function clamp(v, lo, hi){ return Math.max(lo, Math.min(hi, v)); }
+
+  function setQuickSize(toMax){
+    // Ensure mins are up to date
+    applyMinRemaining(false);
+
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const minW = Number(popup.dataset.minw || 120);
+    const minH = Number(popup.dataset.minh || 80);
+
+    if (isPortrait()){
+      if (toMax){
+        const targetH = clamp(vh * 0.90, minH, vh * 0.95);
+        popup.style.height = Math.round(targetH) + "px";
+      } else {
+        popup.style.height = Math.round(minH) + "px";
+      }
+    } else {
+      if (toMax){
+        const targetW = clamp(vw * 0.90, minW, vw * 0.95);
+        popup.style.width = Math.round(targetW) + "px";
+      } else {
+        popup.style.width = Math.round(minW) + "px";
+      }
+    }
+    quickIsMax = !!toMax;
+  }
+
+  const quickBtn = document.getElementById('quick90Btn');
+  if (quickBtn){
+    quickBtn.addEventListener('click', function(e){
+      e.preventDefault();
+      e.stopPropagation();
+      setQuickSize(!quickIsMax);
+    }, {passive:false});
+  }
+
+  function startResize(e, d){
+    isResizing = true;
+    dir = d;
+    startX = e.clientX;
+    startY = e.clientY;
+    const r = popup.getBoundingClientRect();
+    startW = r.width;
+    startH = r.height;
+    try{ e.target.setPointerCapture(e.pointerId); }catch(_){}
+    moveHandler = (ev)=>onMove(ev);
+    document.addEventListener('pointermove', moveHandler, {passive:false});
+    document.addEventListener('pointerup', stopResize, {once:true, passive:true});
+    e.preventDefault();
+  }
+
+  function onMove(e){
+    if(!isResizing) return;
+
+    const minW = Number(popup.dataset.minw || 120);
+    const minH = Number(popup.dataset.minh || 80);
+
+    if (isPortrait() && dir === 'top'){
+      const dy = e.clientY - startY;
+      let newH = startH - dy;
+      newH = Math.max(minH, Math.min(window.innerHeight*0.95, newH));
+      popup.style.height = Math.round(newH) + "px";
+    } else if (!isPortrait() && dir === 'left'){
+      const dx = e.clientX - startX;
+      let newW = startW - dx;
+      newW = Math.max(minW, Math.min(window.innerWidth*0.95, newW));
+      popup.style.width = Math.round(newW) + "px";
+    }
+    e.preventDefault();
+  }
+
+  function stopResize(){
+    isResizing = false;
+    dir = null;
+    if(moveHandler) document.removeEventListener('pointermove', moveHandler);
+    moveHandler = null;
+  }
+
+  handleTop.addEventListener('pointerdown', (e)=>startResize(e,'top'), {passive:false});
+  handleLeft.addEventListener('pointerdown', (e)=>startResize(e,'left'), {passive:false});
+
+  function resetAll(force){
+    applyMinRemaining(!!force);
+  }
+
+  // Recalc after viewport/orientation changes (mobile address bar etc.)
+  window.addEventListener('resize', ()=>{ resetAll(false); }, {passive:true});
+  window.addEventListener('orientationchange', ()=>{ setTimeout(()=>resetAll(true), 180); }, {passive:true});
+
+  if (window.visualViewport){
+    window.visualViewport.addEventListener('resize', ()=>{ setTimeout(()=>resetAll(false), 120); }, {passive:true});
+    window.visualViewport.addEventListener('scroll', ()=>{ setTimeout(()=>resetAll(false), 120); }, {passive:true});
+  }
+
+  // Initial: force min=remaining
+  function init(){
+    resetAll(true);
+  }
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', ()=>setTimeout(init, 0), {once:true});
+  } else {
+    setTimeout(init, 0);
+  }
+  if (img){
+    img.addEventListener('load', ()=>setTimeout(()=>resetAll(true), 0), {once:true});
+  }
+})();
+</script>
+<script>
+let startY = 0;
+let tracking = false;
+const SWIPE_THRESHOLD = 60;
+
+// ---------- TOUCH ----------
+document.addEventListener("touchstart", (e) => {
+  if (e.touches.length !== 1) return;
+  startY = e.touches[0].clientY;
+  tracking = true;
+}, { passive: true });
+
+document.addEventListener("touchmove", (e) => {
+  if (!tracking) return;
+  const dy = startY - e.touches[0].clientY;
+  if (Math.abs(dy) > 20) e.preventDefault(); // chặn scroll khi vuốt mạnh
+}, { passive: false });
+
+document.addEventListener("touchend", (e) => {
+  if (!tracking) return;
+  tracking = false;
+
+  const endY = e.changedTouches[0].clientY;
+  const diffY = startY - endY;
+
+  if (Math.abs(diffY) > SWIPE_THRESHOLD) {
+    toggleFullscreen();
+  }
+}, { passive: true });
+
+// ---------- KEYBOARD ----------
+document.addEventListener("keydown", (e) => {
+  if (e.shiftKey && e.code === "Space") {
+    e.preventDefault(); // tránh scroll
+    toggleFullscreen();
+  }
+});
+
+// ---------- FULLSCREEN CORE ----------
+function toggleFullscreen() {
+  if (document.fullscreenElement) {
+    exitFullscreen();
+  } else {
+    enterFullscreen();
+  }
+}
+
+function enterFullscreen() {
+  const elem = document.documentElement;
+  if (elem.requestFullscreen) elem.requestFullscreen();
+  else if (elem.webkitRequestFullscreen) elem.webkitRequestFullscreen();
+  else if (elem.msRequestFullscreen) elem.msRequestFullscreen();
+}
+
+function exitFullscreen() {
+  if (document.exitFullscreen) document.exitFullscreen();
+  else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+  else if (document.msExitFullscreen) document.msExitFullscreen();
+}
+</script>
+
+
+
+<!-- ===== Dot links data + Markdown/LaTeX render (minimal UI) ===== -->
+
+
+<script src="./jquery/markdown-it.min.js"></script>
+
+<script>
+/* MathJax config (inline $...$ and \(...\)) */
+window.MathJax = {
+  tex: { inlineMath: [['$','$'], ['\\(','\\)']] },
+  svg: { fontCache: 'global' }
+};
+</script>
+<script src="./jquery/tex-svg.js"></script>
+
+<script>
+(function(){
+  const data = Array.isArray(window.__DOT_LINKS__) ? window.__DOT_LINKS__ : [];
+  const dotNav = document.getElementById('dotNav');
+  const aux = document.getElementById('auxText');
+  const fd = document.getElementById('fd');
+  if(!dotNav || !aux || !fd) return;
+
+
+  // Markdown-it instance: you can predefine window.__MD_IT__ (with plugins) before this script
+  const __md = window.__MD_IT__ || (window.markdownit ? window.markdownit({html:true,linkify:true,breaks:true}) : null);
+
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function setActive(idx){
+    [...dotNav.querySelectorAll('.dotBtn')].forEach((b,i)=>{
+      b.classList.toggle('active', i===idx);
+    });
+  }
+
+  function renderAux(text){
+    const t = (text || '').trim();
+    if(!t){
+      aux.style.display = 'none';
+      aux.innerHTML = '';
+      return;
+    }
+    aux.style.display = 'block';
+    const __md = window.__MD_IT__ || (window.markdownit ? window.markdownit({html:true, linkify:true, breaks:true}) : null);
+aux.innerHTML = __md ? __md.render(t) : String(t).replace(/\n/g, "<br>");
+    if(window.MathJax && MathJax.typesetPromise){
+      MathJax.typesetPromise([aux]).catch(()=>{});
+    }
+  }
+
+  // build dots
+  dotNav.innerHTML = '';
+  data.forEach((item, i)=>{
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'dotBtn';
+    btn.textContent = pad2(i);
+    btn.title = item.url ? String(item.url) : '';
+    btn.addEventListener('click', (e)=>{
+      e.preventDefault();
+      e.stopPropagation();
+      if(item && typeof item.url === 'string'){
+        fd.style.display = 'block';
+        fd.data = item.url;
+      }
+      setActive(i);
+      renderAux(item ? item.text : '');
+      if(!(item && typeof item.url === 'string' && item.url.trim())){ fd.style.display = 'none'; fd.data=''; }
+    });
+    dotNav.appendChild(btn);
+  });
+
+  // On start: show only control dots (no content until user clicks)
+  aux.style.display = 'none';
+  aux.innerHTML = '';
+  fd.style.display = 'none';
+})();
+</script>
+
+</body>
+</html>
