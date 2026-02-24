@@ -266,6 +266,36 @@ window.addEventListener('message', function(ev){
     else if(d.action === 'toggle') toggleFullscreen();
   }catch(_){}
 }, false);
+      const obj = document.getElementById("iframeL");
+let uiHidden = false;
+
+// Theo dõi khi thuộc tính data thay đổi
+const observer = new MutationObserver(function(mutations) {
+  mutations.forEach(function(m) {
+    if (m.type === "attributes" && m.attributeName === "data") {
+
+      const newVal = obj.getAttribute("data");
+      if (!newVal || newVal.trim() === "") return;
+
+      // Khi object load xong nội dung
+      obj.addEventListener("load", function onLoadOnce() {
+        if (uiHidden) return;
+        uiHidden = true;
+
+        setTimeout(function () {
+          document.getElementById("textm").style.display = "none";
+          document.getElementById("clock").style.display = "none";
+        }, 1000);
+
+        obj.removeEventListener("load", onLoadOnce);
+      });
+
+    }
+  });
+});
+
+// Bắt đầu quan sát
+observer.observe(obj, { attributes: true });
 </script>
 
 </body>
